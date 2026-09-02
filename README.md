@@ -36,6 +36,13 @@ flutter run
 - `lib/camera_screen.dart` — 카메라 + 오버레이 화면 전체
 - `lib/photo_stamp.dart` — 사진에 날짜·장소 텍스트를 그려 넣는 유틸
 
+## 반응형
+
+- 화면 크기에 따라 컨트롤 크기가 조정된다. `_Metrics`가 짧은 변 길이 기준으로 배율을
+  계산한다: 폰은 390 기준 0.82~1.15배(iPhone mini~대화면), 짧은 변 600 이상은 태블릿으로
+  보고 1.3배 고정 + 상·하단 바를 최대 560 폭으로 가운데 정렬한다.
+- 시스템 글꼴 확대는 HUD가 깨지지 않도록 1.3배로 제한(`MediaQuery.withClampedTextScaling`).
+
 ## 참고
 
 - 안드로이드 툴체인은 `android/settings.gradle.kts`에서 AGP 8.11.1 / Kotlin 2.2.20으로

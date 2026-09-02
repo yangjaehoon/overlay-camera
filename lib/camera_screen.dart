@@ -489,30 +489,37 @@ class _CameraScreenState extends State<CameraScreen>
   // UI
   // ---------------------------------------------------------------------------
 
+  /// 화면 크기에 따른 반응형 치수. iPhone mini부터 태블릿까지 대응.
+  _Metrics get _m => _Metrics(MediaQuery.of(context));
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: _statusMessage != null
-          ? _MessageView(
-              message: _statusMessage!,
-              onOpenSettings: openAppSettings,
-            )
-          : !_isReady
-              ? const Center(child: CircularProgressIndicator())
-              : Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _buildPreview(),
-                    if (_overlayFile != null) _buildOverlay(),
-                    _buildGrid(),
-                    if (_stampEnabled) _buildStampPreview(),
-                    _buildTopBar(),
-                    _buildRightControls(),
-                    if (_stampEnabled) _buildStampCornerPicker(),
-                    _buildBottomBar(),
-                  ],
-                ),
+      // 시스템 글꼴 확대가 카메라 HUD를 깨뜨리지 않도록 배율을 제한한다.
+      body: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.3,
+        child: _statusMessage != null
+            ? _MessageView(
+                message: _statusMessage!,
+                onOpenSettings: openAppSettings,
+              )
+            : !_isReady
+                ? const Center(child: CircularProgressIndicator())
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _buildPreview(),
+                      if (_overlayFile != null) _buildOverlay(),
+                      _buildGrid(),
+                      if (_stampEnabled) _buildStampPreview(),
+                      _buildTopBar(),
+                      _buildRightControls(),
+                      if (_stampEnabled) _buildStampCornerPicker(),
+                      _buildBottomBar(),
+                    ],
+                  ),
+      ),
     );
   }
 
@@ -554,82 +561,94 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Widget _buildTopBar() {
+    final m = _m;
+    final btn = m.spc(38, 34.0, 52.0);
+    final icon = m.spc(21, 19.0, 28.0);
+    final maxW = m.size.width - m.sp(16);
+
     return SafeArea(
       child: Align(
         alignment: Alignment.topCenter,
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 4),
+          margin: EdgeInsets.symmetric(horizontal: m.sp(8), vertical: m.sp(8)),
+          padding: EdgeInsets.symmetric(horizontal: m.sp(4)),
           constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width - 16,
+            maxWidth: m.isTablet ? 560.0 : maxW,
           ),
           decoration: BoxDecoration(
             color: Colors.black38,
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(m.sp(28)),
           ),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-              IconButton(
-                icon: Icon(
-                  _silentShutter ? Icons.volume_off : Icons.volume_up,
+                _BarButton(
+                  icon: _silentShutter ? Icons.volume_off : Icons.volume_up,
                   color: _silentShutter ? Colors.amber : Colors.white,
+                  size: btn,
+                  iconSize: icon,
+                  tooltip: '무음 촬영',
+                  onTap: () =>
+                      setState(() => _silentShutter = !_silentShutter),
                 ),
-                tooltip: '무음 촬영',
-                onPressed: () =>
-                    setState(() => _silentShutter = !_silentShutter),
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.today,
+                _BarButton(
+                  icon: Icons.today,
                   color: _stampEnabled ? Colors.amber : Colors.white,
+                  size: btn,
+                  iconSize: icon,
+                  tooltip: '날짜·장소 표시',
+                  onTap: _toggleStamp,
                 ),
-                tooltip: '날짜·장소 표시',
-                onPressed: _toggleStamp,
-              ),
-              IconButton(
-                icon: Icon(_flashIcon, color: Colors.white),
-                onPressed: _cycleFlash,
-              ),
-              IconButton(
-                icon: Icon(
-                  _overlayLocked ? Icons.lock : Icons.lock_open,
+                _BarButton(
+                  icon: _flashIcon,
+                  color: Colors.white,
+                  size: btn,
+                  iconSize: icon,
+                  tooltip: '플래시',
+                  onTap: _cycleFlash,
+                ),
+                _BarButton(
+                  icon: _overlayLocked ? Icons.lock : Icons.lock_open,
                   color: _overlayLocked ? Colors.amber : Colors.white,
+                  size: btn,
+                  iconSize: icon,
+                  tooltip: '오버레이 고정',
+                  onTap: _overlayFile == null
+                      ? null
+                      : () => setState(() => _overlayLocked = !_overlayLocked),
                 ),
-                tooltip: '오버레이 고정',
-                onPressed: _overlayFile == null
-                    ? null
-                    : () => setState(() => _overlayLocked = !_overlayLocked),
-              ),
-              IconButton(
-                icon: const Icon(Icons.restart_alt, color: Colors.white),
-                tooltip: '오버레이 위치 초기화',
-                onPressed: _overlayFile == null ? null : _resetOverlayTransform,
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.hide_image_outlined,
-                  color: _overlayFile == null ? Colors.white24 : Colors.white,
+                _BarButton(
+                  icon: Icons.restart_alt,
+                  color: Colors.white,
+                  size: btn,
+                  iconSize: icon,
+                  tooltip: '오버레이 위치 초기화',
+                  onTap: _overlayFile == null ? null : _resetOverlayTransform,
                 ),
-                tooltip: '오버레이 제거',
-                onPressed: _overlayFile == null
-                    ? null
-                    : () => setState(() {
-                          _overlayFile = null;
-                          _overlayLocked = false;
-                        }),
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.auto_mode,
+                _BarButton(
+                  icon: Icons.hide_image_outlined,
+                  color: Colors.white,
+                  size: btn,
+                  iconSize: icon,
+                  tooltip: '오버레이 제거',
+                  onTap: _overlayFile == null
+                      ? null
+                      : () => setState(() {
+                            _overlayFile = null;
+                            _overlayLocked = false;
+                          }),
+                ),
+                _BarButton(
+                  icon: Icons.auto_mode,
                   color: _autoUseLastShot ? Colors.amber : Colors.white,
+                  size: btn,
+                  iconSize: icon,
+                  tooltip: '촬영 후 마지막 컷을 오버레이로',
+                  onTap: () =>
+                      setState(() => _autoUseLastShot = !_autoUseLastShot),
                 ),
-                tooltip: '촬영 후 마지막 컷을 오버레이로',
-                onPressed: () =>
-                    setState(() => _autoUseLastShot = !_autoUseLastShot),
-              ),
               ],
             ),
           ),
@@ -640,27 +659,30 @@ class _CameraScreenState extends State<CameraScreen>
 
   /// 선택한 모서리에 찍힐 스탬프 문구 미리보기.
   Widget _buildStampPreview() {
+    final m = _m;
     final placeHint = _stampPlace ?? (_resolvingPlace ? '위치 확인 중…' : null);
+    // 위/아래 컨트롤과 겹치지 않도록 스케일된 컴포넌트 높이만큼 여백을 둔다.
+    final topClear = m.sp(52) + m.sp(34) * 2 + m.sp(40) + m.sp(12);
+    final bottomClear = m.sp(58) + m.sp(22) + m.sp(18);
     return IgnorePointer(
       child: SafeArea(
-        minimum: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        minimum: EdgeInsets.symmetric(horizontal: m.sp(14), vertical: m.sp(12)),
         child: Align(
           alignment: _stampCorner.alignment,
           child: Padding(
-            // 상단은 상단 바+위치 선택 패널, 하단은 하단 컨트롤과 겹치지 않도록 여백.
             padding: EdgeInsets.only(
-              top: _stampCorner.isTop ? 172 : 0,
-              bottom: _stampCorner.isTop ? 0 : 96,
+              top: _stampCorner.isTop ? topClear : 0,
+              bottom: _stampCorner.isTop ? 0 : bottomClear,
             ),
             child: Text(
               buildStampText(DateTime.now(), placeHint),
               textAlign: _stampCorner.isLeft ? TextAlign.left : TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
-                fontSize: 15,
+                fontSize: m.spc(15, 13.0, 22.0),
                 fontWeight: FontWeight.w600,
                 height: 1.25,
-                shadows: [
+                shadows: const [
                   Shadow(color: Colors.black87, blurRadius: 4),
                   Shadow(color: Colors.black54, blurRadius: 8),
                 ],
@@ -674,36 +696,40 @@ class _CameraScreenState extends State<CameraScreen>
 
   /// 스탬프 위치(4모서리) 선택 패널.
   Widget _buildStampCornerPicker() {
+    final m = _m;
     return SafeArea(
       child: Align(
         alignment: Alignment.topCenter,
         child: Container(
-          margin: const EdgeInsets.only(top: 60),
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+          margin: EdgeInsets.only(top: m.sp(52)),
+          padding: EdgeInsets.fromLTRB(m.sp(10), m.sp(8), m.sp(10), m.sp(10)),
           decoration: BoxDecoration(
             color: Colors.black38,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(m.sp(16)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 '스탬프 위치',
-                style: TextStyle(color: Colors.white, fontSize: 11),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: m.spc(11, 10.0, 15.0),
+                ),
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: m.sp(6)),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _stampCornerButton(StampCorner.topLeft),
-                  _stampCornerButton(StampCorner.topRight),
+                  _stampCornerButton(StampCorner.topLeft, m),
+                  _stampCornerButton(StampCorner.topRight, m),
                 ],
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _stampCornerButton(StampCorner.bottomLeft),
-                  _stampCornerButton(StampCorner.bottomRight),
+                  _stampCornerButton(StampCorner.bottomLeft, m),
+                  _stampCornerButton(StampCorner.bottomRight, m),
                 ],
               ),
             ],
@@ -713,26 +739,27 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
-  Widget _stampCornerButton(StampCorner corner) {
+  Widget _stampCornerButton(StampCorner corner, _Metrics m) {
     final active = _stampCorner == corner;
+    final r = m.sp(8);
     return Padding(
-      padding: const EdgeInsets.all(3),
+      padding: EdgeInsets.all(m.sp(3)),
       child: Material(
         color: active ? Colors.amber : Colors.white24,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(r),
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(r),
           onTap: () => setState(() => _stampCorner = corner),
           child: SizedBox(
-            width: 50,
-            height: 36,
+            width: m.spc(50, 44.0, 72.0),
+            height: m.spc(34, 30.0, 48.0),
             child: Align(
               alignment: corner.alignment,
               child: Padding(
-                padding: const EdgeInsets.all(5),
+                padding: EdgeInsets.all(m.sp(5)),
                 child: Container(
-                  width: 16,
-                  height: 7,
+                  width: m.sp(15),
+                  height: m.sp(6),
                   decoration: BoxDecoration(
                     color: active ? Colors.black87 : Colors.white70,
                     borderRadius: BorderRadius.circular(2),
@@ -747,23 +774,28 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Widget _buildRightControls() {
+    final m = _m;
+    final sliderLen = (m.size.height * 0.30)
+        .clamp(140.0, m.isTablet ? 420.0 : 260.0)
+        .toDouble();
     return SafeArea(
       child: Align(
         alignment: Alignment.centerRight,
         child: Container(
-          margin: const EdgeInsets.only(right: 6),
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          margin: EdgeInsets.only(right: m.sp(6)),
+          padding: EdgeInsets.symmetric(vertical: m.sp(12)),
           decoration: BoxDecoration(
             color: Colors.black38,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(m.sp(24)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.opacity, color: Colors.white, size: 18),
+              Icon(Icons.opacity,
+                  color: Colors.white, size: m.spc(18, 16.0, 26.0)),
               SizedBox(
-                width: 40,
-                height: 200,
+                width: m.spc(40, 36.0, 52.0),
+                height: sliderLen,
                 child: RotatedBox(
                   quarterTurns: 3,
                   child: SliderTheme(
@@ -783,7 +815,10 @@ class _CameraScreenState extends State<CameraScreen>
               ),
               Text(
                 '${(_overlayOpacity * 100).round()}%',
-                style: const TextStyle(color: Colors.white, fontSize: 12),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: m.spc(12, 11.0, 16.0),
+                ),
               ),
             ],
           ),
@@ -793,44 +828,121 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Widget _buildBottomBar() {
+    final m = _m;
     return SafeArea(
       child: Align(
         alignment: Alignment.bottomCenter,
         child: Padding(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _RoundButton(
-                icon: Icons.photo_library_outlined,
-                onPressed: _busy ? null : _pickOverlayFromGallery,
-                label: '갤러리',
-              ),
-              _RoundButton(
-                icon: Icons.camera_alt_outlined,
-                onPressed: _busy || _isRecording ? null : _takePhoto,
-                label: '사진',
-                big: true,
-              ),
-              _RoundButton(
-                icon: _isRecording ? Icons.stop : Icons.fiber_manual_record,
-                iconColor: Colors.redAccent,
-                onPressed: _busy ? null : _toggleRecording,
-                label: _isRecording ? '정지' : '동영상',
-                big: true,
-              ),
-              _RoundButton(
-                icon: Icons.center_focus_strong,
-                onPressed: _busy || _isRecording ? null : _snapshotToOverlay,
-                label: '스냅샷',
-              ),
-              _RoundButton(
-                icon: Icons.cameraswitch_outlined,
-                onPressed:
-                    _busy || _isRecording || cameras.length < 2 ? null : _flipCamera,
-                label: '전환',
-              ),
-            ],
+          padding: EdgeInsets.only(bottom: m.sp(20), left: m.sp(4), right: m.sp(4)),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: m.size.width < 560 ? m.size.width : 560.0,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _RoundButton(
+                  icon: Icons.photo_library_outlined,
+                  onPressed: _busy ? null : _pickOverlayFromGallery,
+                  label: '갤러리',
+                  scale: m.scale,
+                ),
+                _RoundButton(
+                  icon: Icons.camera_alt_outlined,
+                  onPressed: _busy || _isRecording ? null : _takePhoto,
+                  label: '사진',
+                  big: true,
+                  scale: m.scale,
+                ),
+                _RoundButton(
+                  icon: _isRecording ? Icons.stop : Icons.fiber_manual_record,
+                  iconColor: Colors.redAccent,
+                  onPressed: _busy ? null : _toggleRecording,
+                  label: _isRecording ? '정지' : '동영상',
+                  big: true,
+                  scale: m.scale,
+                ),
+                _RoundButton(
+                  icon: Icons.center_focus_strong,
+                  onPressed: _busy || _isRecording ? null : _snapshotToOverlay,
+                  label: '스냅샷',
+                  scale: m.scale,
+                ),
+                _RoundButton(
+                  icon: Icons.cameraswitch_outlined,
+                  onPressed: _busy || _isRecording || cameras.length < 2
+                      ? null
+                      : _flipCamera,
+                  label: '전환',
+                  scale: m.scale,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 화면 크기 기반 반응형 치수. iPhone mini(~320~375)부터 태블릿(>=600)까지 대응.
+class _Metrics {
+  _Metrics(MediaQueryData mq)
+      : size = mq.size,
+        padding = mq.padding,
+        _shortest = mq.size.shortestSide;
+
+  final Size size;
+  final EdgeInsets padding;
+  final double _shortest;
+
+  bool get isTablet => _shortest >= 600;
+
+  /// 기준 폭 390 대비 배율. 폰은 0.82~1.15, 태블릿은 1.3 고정.
+  double get scale => isTablet
+      ? 1.3
+      : (_shortest / 390).clamp(0.82, 1.15).toDouble();
+
+  /// 스케일이 적용된 크기.
+  double sp(double v) => v * scale;
+
+  /// 스케일 적용 후 [lo]~[hi]로 제한한 크기.
+  double spc(double v, double lo, double hi) =>
+      (v * scale).clamp(lo, hi).toDouble();
+}
+
+/// 상단 바용 소형 아이콘 버튼.
+class _BarButton extends StatelessWidget {
+  const _BarButton({
+    required this.icon,
+    required this.color,
+    required this.size,
+    required this.iconSize,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final double size;
+  final double iconSize;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: size * 0.6,
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Icon(
+            icon,
+            size: iconSize,
+            color: onTap == null ? Colors.white24 : color,
           ),
         ),
       ),
@@ -845,6 +957,7 @@ class _RoundButton extends StatelessWidget {
     required this.label,
     this.big = false,
     this.iconColor = Colors.white,
+    this.scale = 1.0,
   });
 
   final IconData icon;
@@ -852,10 +965,12 @@ class _RoundButton extends StatelessWidget {
   final String label;
   final bool big;
   final Color iconColor;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
-    final size = big ? 64.0 : 48.0;
+    final size = (big ? 58.0 : 46.0) * scale;
+    final iconSize = (big ? 28.0 : 22.0) * scale;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -871,13 +986,16 @@ class _RoundButton extends StatelessWidget {
               child: Icon(
                 icon,
                 color: onPressed == null ? Colors.white24 : iconColor,
-                size: big ? 30 : 24,
+                size: iconSize,
               ),
             ),
           ),
         ),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(color: Colors.white, fontSize: 11)),
+        SizedBox(height: 4 * scale),
+        Text(
+          label,
+          style: TextStyle(color: Colors.white, fontSize: 11 * scale),
+        ),
       ],
     );
   }

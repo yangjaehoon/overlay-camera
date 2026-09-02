@@ -69,10 +69,14 @@ String? shortPlaceName(String? admin, String? locality, String? subLocality) {
 /// rawRgba 픽셀을 JPEG로 인코딩한다. 순수 Dart 연산이라 백그라운드 아이소레이트에서 실행.
 Uint8List _encodeRgbaToJpg((Uint8List, int, int) args) {
   final (rgba, width, height) = args;
+  // offset이 0이 아닌 뷰가 넘어와도 안전하도록 픽셀 영역만 담은 버퍼를 만든다.
+  final bytes = rgba.offsetInBytes == 0 && rgba.lengthInBytes == rgba.buffer.lengthInBytes
+      ? rgba.buffer
+      : Uint8List.fromList(rgba).buffer;
   final image = img.Image.fromBytes(
     width: width,
     height: height,
-    bytes: rgba.buffer,
+    bytes: bytes,
     numChannels: 4,
     order: img.ChannelOrder.rgba,
   );
@@ -144,8 +148,8 @@ Future<File> stampPhoto(
   }
 
   // rawRgba -> JPEG 인코딩은 순수 Dart라 UI 아이소레이트를 막지 않도록 분리한다.
-  final rgba =
-      Uint8List.fromList(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
+  // toByteData가 전용 버퍼를 돌려주므로 추가 복사 없이 뷰를 그대로 넘긴다.
+  final rgba = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
   final jpg = await Isolate.run(() => _encodeRgbaToJpg((rgba, iw, ih)));
 
   final base = src.path.replaceAll(RegExp(r'\.[A-Za-z0-9]+$'), '');

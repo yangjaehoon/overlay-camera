@@ -81,7 +81,13 @@ class _CameraScreenState extends State<CameraScreen>
         state == AppLifecycleState.hidden) {
       final controller = _controller;
       _controller = null;
-      if (_isRecording && mounted) setState(() => _isRecording = false);
+      // 백그라운드 진입으로 진행 중이던 촬영이 중단되면 상태가 잠길 수 있어 함께 되돌린다.
+      if ((_isRecording || _busy) && mounted) {
+        setState(() {
+          _isRecording = false;
+          _busy = false;
+        });
+      }
       controller?.dispose();
     } else if (state == AppLifecycleState.resumed) {
       if (_controller == null && _statusMessage == null && cameras.isNotEmpty) {
@@ -154,6 +160,7 @@ class _CameraScreenState extends State<CameraScreen>
     }
 
     if (!mounted) {
+      if (_controller == controller) _controller = null;
       await controller.dispose();
       return;
     }
@@ -196,6 +203,7 @@ class _CameraScreenState extends State<CameraScreen>
 
   /// 오버레이 이미지를 교체한다. 이전 파일이 작업 폴더 소유면 삭제한다.
   void _setOverlay(File file) {
+    if (!mounted) return;
     final old = _overlayFile;
     setState(() => _overlayFile = file);
     _resetOverlayTransform();
@@ -463,6 +471,9 @@ class _CameraScreenState extends State<CameraScreen>
       await Gal.putImage(path, album: 'GhostCamera');
     } on GalException {
       _toast('갤러리 저장 권한을 확인해 주세요.');
+    } on Exception catch (e) {
+      debugPrint('사진 갤러리 저장 실패: $e');
+      _toast('갤러리에 저장하지 못했습니다.');
     }
   }
 
@@ -473,6 +484,9 @@ class _CameraScreenState extends State<CameraScreen>
       await Gal.putVideo(path, album: 'GhostCamera');
     } on GalException {
       _toast('갤러리 저장 권한을 확인해 주세요.');
+    } on Exception catch (e) {
+      debugPrint('동영상 갤러리 저장 실패: $e');
+      _toast('갤러리에 저장하지 못했습니다.');
     }
   }
 

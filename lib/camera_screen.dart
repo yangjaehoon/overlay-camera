@@ -147,7 +147,9 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   /// 저장된 설정을 불러와 초기 상태에 반영한다. 실패해도 기본값으로 진행한다.
+  /// (재시도로 다시 호출돼도 이미 불러왔으면 건너뛴다)
   Future<void> _loadSettings() async {
+    if (_settings != null) return;
     try {
       final s = await SettingsStore.load();
       if (!mounted) return;
@@ -158,7 +160,9 @@ class _CameraScreenState extends State<CameraScreen>
         _stampCorner = s.stampCorner;
         _autoUseLastShot = s.autoUseLastShot;
         _overlayOpacity = s.overlayOpacity;
-        _flashMode = s.flashMode;
+        // torch를 저장했다면 앱을 켜자마자 손전등이 켜지는 것을 막는다.
+        _flashMode =
+            s.flashMode == FlashMode.torch ? FlashMode.off : s.flashMode;
       });
     } on Exception catch (e) {
       debugPrint('설정 로드 실패: $e');

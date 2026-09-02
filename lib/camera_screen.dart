@@ -14,6 +14,7 @@ import 'package:video_thumbnail/video_thumbnail.dart' as vt;
 
 import 'main.dart';
 import 'photo_stamp.dart';
+import 'settings_store.dart';
 
 /// 라이브 카메라 프리뷰 위에 반투명 참조 사진(고스트)을 겹쳐 보여주고,
 /// 그 사진에 인물 위치·크기를 맞춰 사진/동영상을 촬영하는 화면.
@@ -58,6 +59,7 @@ class _CameraScreenState extends State<CameraScreen>
   double _gestureBaseRotation = 0.0;
 
   final ImagePicker _picker = ImagePicker();
+  SettingsStore? _settings;
 
   @override
   void initState() {
@@ -98,6 +100,7 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _bootstrap() async {
     if (mounted) setState(() => _statusMessage = null);
+    await _loadSettings();
 
     Map<Permission, PermissionStatus> statuses;
     try {
@@ -130,12 +133,36 @@ class _CameraScreenState extends State<CameraScreen>
       return;
     }
 
-    final backIndex = cameras.indexWhere(
-      (c) => c.lensDirection == CameraLensDirection.back,
-    );
-    _cameraIndex = backIndex >= 0 ? backIndex : 0;
+    final savedDir = _settings?.lensDirection ?? CameraLensDirection.back;
+    var idx = cameras.indexWhere((c) => c.lensDirection == savedDir);
+    if (idx < 0) {
+      idx = cameras.indexWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+      );
+    }
+    _cameraIndex = idx >= 0 ? idx : 0;
     await _initCamera(_cameraIndex);
+    if (_stampEnabled) unawaited(_refreshStampPlace());
     unawaited(_pruneWorkDir());
+  }
+
+  /// 저장된 설정을 불러와 초기 상태에 반영한다. 실패해도 기본값으로 진행한다.
+  Future<void> _loadSettings() async {
+    try {
+      final s = await SettingsStore.load();
+      if (!mounted) return;
+      _settings = s;
+      setState(() {
+        _silentShutter = s.silentShutter;
+        _stampEnabled = s.stampEnabled;
+        _stampCorner = s.stampCorner;
+        _autoUseLastShot = s.autoUseLastShot;
+        _overlayOpacity = s.overlayOpacity;
+        _flashMode = s.flashMode;
+      });
+    } on Exception catch (e) {
+      debugPrint('설정 로드 실패: $e');
+    }
   }
 
   Future<void> _initCamera(int index) async {
@@ -494,11 +521,27 @@ class _CameraScreenState extends State<CameraScreen>
   // 날짜·장소 스탬프
   // ---------------------------------------------------------------------------
 
+  void _toggleSilentShutter() {
+    setState(() => _silentShutter = !_silentShutter);
+    _settings?.setSilentShutter(_silentShutter);
+  }
+
+  void _toggleAutoOverlay() {
+    setState(() => _autoUseLastShot = !_autoUseLastShot);
+    _settings?.setAutoUseLastShot(_autoUseLastShot);
+  }
+
   void _toggleStamp() {
     final next = !_stampEnabled;
     setState(() => _stampEnabled = next);
+    _settings?.setStampEnabled(next);
     // 켤 때마다 현재 위치를 다시 확인한다. (장소가 바뀐 뒤 다시 켜면 갱신)
     if (next) _refreshStampPlace();
+  }
+
+  void _selectStampCorner(StampCorner corner) {
+    setState(() => _stampCorner = corner);
+    _settings?.setStampCorner(corner);
   }
 
   /// 현재 위치를 역지오코딩해 스탬프에 넣을 장소명을 갱신한다.
@@ -560,6 +603,7 @@ class _CameraScreenState extends State<CameraScreen>
     if (cameras.length < 2 || _isRecording || _busy) return;
     _cameraIndex = (_cameraIndex + 1) % cameras.length;
     await _initCamera(_cameraIndex);
+    _settings?.setLensDirection(cameras[_cameraIndex].lensDirection);
   }
 
   Future<void> _cycleFlash() async {
@@ -569,6 +613,7 @@ class _CameraScreenState extends State<CameraScreen>
     try {
       await _controller!.setFlashMode(next);
       setState(() => _flashMode = next);
+      _settings?.setFlashMode(next);
     } on CameraException {
       _toast('이 기기에서는 플래시를 사용할 수 없습니다.');
     }
@@ -702,8 +747,7 @@ class _CameraScreenState extends State<CameraScreen>
                   size: btn,
                   iconSize: icon,
                   tooltip: '무음 촬영',
-                  onTap: () =>
-                      setState(() => _silentShutter = !_silentShutter),
+                  onTap: _toggleSilentShutter,
                 ),
                 _BarButton(
                   icon: Icons.today,
@@ -753,8 +797,7 @@ class _CameraScreenState extends State<CameraScreen>
                   size: btn,
                   iconSize: icon,
                   tooltip: '촬영 후 마지막 컷을 오버레이로',
-                  onTap: () =>
-                      setState(() => _autoUseLastShot = !_autoUseLastShot),
+                  onTap: _toggleAutoOverlay,
                 ),
               ],
             ),
@@ -856,7 +899,7 @@ class _CameraScreenState extends State<CameraScreen>
         borderRadius: BorderRadius.circular(r),
         child: InkWell(
           borderRadius: BorderRadius.circular(r),
-          onTap: () => setState(() => _stampCorner = corner),
+          onTap: () => _selectStampCorner(corner),
           child: SizedBox(
             width: m.spc(50, 44.0, 72.0),
             height: m.spc(34, 30.0, 48.0),
@@ -916,6 +959,9 @@ class _CameraScreenState extends State<CameraScreen>
                       onChanged: _overlayFile == null
                           ? null
                           : (v) => setState(() => _overlayOpacity = v),
+                      onChangeEnd: _overlayFile == null
+                          ? null
+                          : (v) => _settings?.setOverlayOpacity(v),
                     ),
                   ),
                 ),

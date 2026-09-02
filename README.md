@@ -35,6 +35,13 @@ flutter run
 - `lib/main.dart` — 앱 진입점, 카메라 목록 조회
 - `lib/camera_screen.dart` — 카메라 + 오버레이 화면 전체
 - `lib/photo_stamp.dart` — 사진에 날짜·장소 텍스트를 그려 넣는 유틸
+- `lib/settings_store.dart` — 설정 영속화(SharedPreferences)
+
+## 설정 영속화
+
+무음 촬영, 날짜·장소 스탬프 on/off, 스탬프 위치, 촬영 후 자동 오버레이, 플래시 모드,
+오버레이 투명도, 마지막 사용 카메라(렌즈 방향)를 `SharedPreferences`에 저장하고 재실행 시
+복원한다. 카메라는 기기마다 index가 달라 렌즈 방향(front/back)으로 저장한다.
 
 ## 반응형
 

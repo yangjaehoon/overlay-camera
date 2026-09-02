@@ -39,6 +39,10 @@ class _CameraScreenState extends State<CameraScreen>
   bool _overlayLocked = false;
   bool _autoUseLastShot = true;
 
+  // 무음 촬영: 셔터음이 강제되는 기기에서도 소리 없이 정지 이미지를 얻기 위해
+  // 아주 짧게 동영상을 녹화한 뒤 첫 프레임을 추출하는 방식.
+  bool _silentShutter = false;
+
   // 제스처 시작 시점 기준값
   double _gestureBaseScale = 1.0;
   double _gestureBaseRotation = 0.0;
@@ -168,20 +172,21 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
-  /// 프리뷰 상태에서 현재 화면을 조용히 캡처해 오버레이로 사용 (저장하지 않음).
+  /// 프리뷰 상태에서 현재 화면을 캡처해 오버레이로 사용 (저장하지 않음).
   Future<void> _snapshotToOverlay() async {
     if (!_isReady || _busy || _isRecording) return;
     setState(() => _busy = true);
     try {
-      final shot = await _controller!.takePicture();
-      final saved = await _copyToAppDir(shot.path, 'overlay');
+      final saved = await _grabStill('overlay');
+      if (saved == null) {
+        _toast('스냅샷을 찍지 못했습니다.');
+        return;
+      }
       setState(() {
         _overlayFile = saved;
         _resetOverlayTransform();
       });
       _toast('현재 화면을 오버레이로 저장했습니다.');
-    } on CameraException {
-      _toast('스냅샷을 찍지 못했습니다.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -195,8 +200,11 @@ class _CameraScreenState extends State<CameraScreen>
     if (!_isReady || _busy || _isRecording) return;
     setState(() => _busy = true);
     try {
-      final shot = await _controller!.takePicture();
-      final saved = await _copyToAppDir(shot.path, 'photo');
+      final saved = await _grabStill('photo');
+      if (saved == null) {
+        _toast('사진을 찍지 못했습니다.');
+        return;
+      }
       await _saveImageToGallery(saved.path);
       if (_autoUseLastShot) {
         setState(() {
@@ -204,11 +212,56 @@ class _CameraScreenState extends State<CameraScreen>
           _resetOverlayTransform();
         });
       }
-      _toast('사진을 갤러리에 저장했습니다.');
-    } on CameraException {
-      _toast('사진을 찍지 못했습니다.');
+      _toast(_silentShutter ? '무음으로 사진을 저장했습니다.' : '사진을 갤러리에 저장했습니다.');
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// 정지 이미지 한 장을 앱 폴더에 저장하고 File을 돌려준다. 실패 시 null.
+  /// 무음 모드면 셔터음 없이 촬영하는 방식을 사용한다.
+  Future<File?> _grabStill(String prefix) async {
+    if (_silentShutter) return _grabSilentStill(prefix);
+    try {
+      final shot = await _controller!.takePicture();
+      return _copyToAppDir(shot.path, prefix);
+    } on CameraException {
+      return null;
+    }
+  }
+
+  /// 셔터음이 강제되는 기기 대응: 아주 짧게 동영상을 녹화한 뒤 첫 프레임을 뽑아
+  /// 정지 이미지로 저장한다. 동영상 녹화 경로에는 셔터음이 없다.
+  Future<File?> _grabSilentStill(String prefix) async {
+    final controller = _controller!;
+    String? clipPath;
+    String? framePath;
+    try {
+      await controller.startVideoRecording();
+      await Future<void>.delayed(const Duration(milliseconds: 550));
+      final clip = await controller.stopVideoRecording();
+      clipPath = clip.path;
+
+      framePath = await vt.VideoThumbnail.thumbnailFile(
+        video: clip.path,
+        imageFormat: vt.ImageFormat.JPEG,
+        timeMs: 0,
+        quality: 95,
+      );
+      if (framePath == null) return null;
+      return await _copyToAppDir(framePath, prefix, ext: 'jpg');
+    } on CameraException {
+      return null;
+    } finally {
+      for (final path in [clipPath, framePath]) {
+        if (path == null) continue;
+        try {
+          final f = File(path);
+          if (f.existsSync()) await f.delete();
+        } catch (_) {
+          // 임시 파일 정리 실패는 무시
+        }
+      }
     }
   }
 
@@ -425,6 +478,15 @@ class _CameraScreenState extends State<CameraScreen>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              IconButton(
+                icon: Icon(
+                  _silentShutter ? Icons.volume_off : Icons.volume_up,
+                  color: _silentShutter ? Colors.amber : Colors.white,
+                ),
+                tooltip: '무음 촬영',
+                onPressed: () =>
+                    setState(() => _silentShutter = !_silentShutter),
+              ),
               IconButton(
                 icon: Icon(_flashIcon, color: Colors.white),
                 onPressed: _cycleFlash,

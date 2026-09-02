@@ -75,21 +75,35 @@ class _CameraScreenState extends State<CameraScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final controller = _controller;
-    if (controller == null || !controller.value.isInitialized) return;
-
-    if (state == AppLifecycleState.inactive) {
-      controller.dispose();
+    // inactive는 알림 배너·제어센터·앱 자신이 띄운 권한 다이얼로그에서도 발생하므로
+    // 여기서 카메라를 해제하면 프리뷰가 불필요하게 깜빡인다. paused/hidden에서만 해제.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      final controller = _controller;
+      _controller = null;
+      if (_isRecording && mounted) setState(() => _isRecording = false);
+      controller?.dispose();
     } else if (state == AppLifecycleState.resumed) {
-      _initCamera(_cameraIndex);
+      if (_controller == null && _statusMessage == null && cameras.isNotEmpty) {
+        _initCamera(_cameraIndex);
+      }
     }
   }
 
   Future<void> _bootstrap() async {
-    final statuses = await <Permission>[
-      Permission.camera,
-      Permission.microphone,
-    ].request();
+    if (mounted) setState(() => _statusMessage = null);
+
+    Map<Permission, PermissionStatus> statuses;
+    try {
+      statuses = await <Permission>[
+        Permission.camera,
+        Permission.microphone,
+      ].request();
+    } on Exception catch (e) {
+      debugPrint('권한 요청 실패: $e');
+      statuses = const {};
+    }
+    if (!mounted) return;
 
     final cameraDenied = statuses[Permission.camera] != PermissionStatus.granted;
     if (cameraDenied) {
@@ -104,6 +118,7 @@ class _CameraScreenState extends State<CameraScreen>
         // 무시하고 아래에서 처리
       }
     }
+    if (!mounted) return;
     if (cameras.isEmpty) {
       setState(() => _statusMessage = '사용 가능한 카메라를 찾지 못했습니다.');
       return;
@@ -114,6 +129,7 @@ class _CameraScreenState extends State<CameraScreen>
     );
     _cameraIndex = backIndex >= 0 ? backIndex : 0;
     await _initCamera(_cameraIndex);
+    unawaited(_pruneWorkDir());
   }
 
   Future<void> _initCamera(int index) async {
@@ -128,17 +144,26 @@ class _CameraScreenState extends State<CameraScreen>
 
     try {
       await controller.initialize();
-      if (!mounted) return;
-      try {
-        await controller.setFlashMode(_flashMode);
-      } on CameraException {
-        // 일부 기기는 플래시 미지원
-      }
+    } on CameraException catch (e) {
+      debugPrint('카메라 초기화 실패: $e');
+      await controller.dispose();
       await previous?.dispose();
-      setState(() {});
-    } on CameraException {
-      setState(() => _statusMessage = '카메라를 초기화하지 못했습니다.');
+      if (_controller == controller) _controller = null;
+      if (mounted) setState(() => _statusMessage = '카메라를 초기화하지 못했습니다.');
+      return;
     }
+
+    if (!mounted) {
+      await controller.dispose();
+      return;
+    }
+    try {
+      await controller.setFlashMode(_flashMode);
+    } on CameraException {
+      // 일부 기기는 플래시 미지원
+    }
+    await previous?.dispose();
+    setState(() {});
   }
 
   bool get _isReady =>
@@ -169,14 +194,28 @@ class _CameraScreenState extends State<CameraScreen>
     });
   }
 
+  /// 오버레이 이미지를 교체한다. 이전 파일이 작업 폴더 소유면 삭제한다.
+  void _setOverlay(File file) {
+    final old = _overlayFile;
+    setState(() => _overlayFile = file);
+    _resetOverlayTransform();
+    if (old != null && old.path != file.path) _deleteIfOwned(old);
+  }
+
+  void _clearOverlay() {
+    final old = _overlayFile;
+    setState(() {
+      _overlayFile = null;
+      _overlayLocked = false;
+    });
+    if (old != null) _deleteIfOwned(old);
+  }
+
   Future<void> _pickOverlayFromGallery() async {
     try {
       final picked = await _picker.pickImage(source: ImageSource.gallery);
       if (picked == null) return;
-      setState(() {
-        _overlayFile = File(picked.path);
-        _resetOverlayTransform();
-      });
+      _setOverlay(File(picked.path));
     } catch (_) {
       _toast('갤러리에서 이미지를 불러오지 못했습니다.');
     }
@@ -192,11 +231,8 @@ class _CameraScreenState extends State<CameraScreen>
         _toast('스냅샷을 찍지 못했습니다.');
         return;
       }
-      setState(() {
-        _overlayFile = saved;
-        _resetOverlayTransform();
-      });
-      _toast('현재 화면을 오버레이로 저장했습니다.');
+      _setOverlay(saved);
+      _toast('현재 화면을 오버레이로 사용합니다.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -216,12 +252,12 @@ class _CameraScreenState extends State<CameraScreen>
         return;
       }
       final finalFile = await _maybeStamp(saved);
+      if (finalFile.path != saved.path) _deleteIfOwned(saved); // 스탬프 전 원본
       await _saveImageToGallery(finalFile.path);
       if (_autoUseLastShot) {
-        setState(() {
-          _overlayFile = finalFile;
-          _resetOverlayTransform();
-        });
+        _setOverlay(finalFile);
+      } else {
+        _deleteIfOwned(finalFile); // 갤러리에 저장됨, 더 이상 참조 안 함
       }
       _toast(_silentShutter ? '무음으로 사진을 저장했습니다.' : '사진을 갤러리에 저장했습니다.');
     } finally {
@@ -229,14 +265,19 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
-  /// 정지 이미지 한 장을 앱 폴더에 저장하고 File을 돌려준다. 실패 시 null.
+  /// 정지 이미지 한 장을 작업 폴더에 저장하고 File을 돌려준다. 실패 시 null.
   /// 무음 모드면 셔터음 없이 촬영하는 방식을 사용한다.
   Future<File?> _grabStill(String prefix) async {
-    if (_silentShutter) return _grabSilentStill(prefix);
     try {
+      if (_silentShutter) return await _grabSilentStill(prefix);
       final shot = await _controller!.takePicture();
-      return _copyToAppDir(shot.path, prefix);
-    } on CameraException {
+      return await _copyToWorkDir(shot.path, prefix);
+    } on CameraException catch (e) {
+      debugPrint('촬영 실패: $e');
+      return null;
+    } on Exception catch (e) {
+      // 저장공간 부족 등 파일 IO 실패
+      debugPrint('촬영본 저장 실패: $e');
       return null;
     }
   }
@@ -260,7 +301,7 @@ class _CameraScreenState extends State<CameraScreen>
         quality: 95,
       );
       if (framePath == null) return null;
-      return await _copyToAppDir(framePath, prefix, ext: 'jpg');
+      return await _copyToWorkDir(framePath, prefix, ext: 'jpg');
     } on CameraException {
       return null;
     } finally {
@@ -285,7 +326,8 @@ class _CameraScreenState extends State<CameraScreen>
         text: buildStampText(DateTime.now(), _stampPlace),
         corner: _stampCorner,
       );
-    } catch (_) {
+    } on Exception catch (e) {
+      debugPrint('스탬프 적용 실패: $e');
       _toast('스탬프를 적용하지 못해 원본으로 저장합니다.');
       return src;
     }
@@ -293,34 +335,43 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _toggleRecording() async {
     if (!_isReady || _busy) return;
-
-    if (_isRecording) {
-      setState(() => _busy = true);
-      try {
-        final file = await _controller!.stopVideoRecording();
-        setState(() => _isRecording = false);
-        final saved = await _copyToAppDir(file.path, 'video', ext: 'mp4');
-        await _saveVideoToGallery(saved.path);
-        if (_autoUseLastShot) {
-          await _setOverlayFromVideoLastFrame(saved.path);
+    setState(() => _busy = true);
+    try {
+      if (_isRecording) {
+        try {
+          final file = await _controller!.stopVideoRecording();
+          final saved = await _copyToWorkDir(file.path, 'video', ext: 'mp4');
+          await _saveVideoToGallery(saved.path);
+          if (_autoUseLastShot) {
+            await _setOverlayFromVideoLastFrame(saved.path);
+          }
+          _deleteIfOwned(saved); // 갤러리에 저장됨
+          _toast('동영상을 갤러리에 저장했습니다.');
+        } on CameraException catch (e) {
+          debugPrint('동영상 정지 실패: $e');
+          _toast('동영상 저장에 실패했습니다.');
+        } on Exception catch (e) {
+          debugPrint('동영상 저장 실패: $e');
+          _toast('동영상 저장에 실패했습니다.');
+        } finally {
+          if (mounted) setState(() => _isRecording = false);
         }
-        _toast('동영상을 갤러리에 저장했습니다.');
-      } on CameraException {
-        _toast('동영상 저장에 실패했습니다.');
-      } finally {
-        if (mounted) setState(() => _busy = false);
+      } else {
+        try {
+          await _controller!.startVideoRecording();
+          if (mounted) setState(() => _isRecording = true);
+        } on CameraException catch (e) {
+          debugPrint('녹화 시작 실패: $e');
+          _toast('녹화를 시작하지 못했습니다.');
+        }
       }
-    } else {
-      try {
-        await _controller!.startVideoRecording();
-        setState(() => _isRecording = true);
-      } on CameraException {
-        _toast('녹화를 시작하지 못했습니다.');
-      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _setOverlayFromVideoLastFrame(String videoPath) async {
+    String? thumbPath;
     try {
       final vp = VideoPlayerController.file(File(videoPath));
       await vp.initialize();
@@ -328,19 +379,24 @@ class _CameraScreenState extends State<CameraScreen>
       await vp.dispose();
 
       final targetMs = durationMs > 200 ? durationMs - 120 : 0;
-      final thumbPath = await vt.VideoThumbnail.thumbnailFile(
+      thumbPath = await vt.VideoThumbnail.thumbnailFile(
         video: videoPath,
         imageFormat: vt.ImageFormat.PNG,
         timeMs: targetMs,
         quality: 100,
       );
       if (thumbPath == null) return;
-      setState(() {
-        _overlayFile = File(thumbPath);
-        _resetOverlayTransform();
-      });
-    } catch (_) {
-      // 마지막 프레임 추출 실패는 조용히 무시
+      final owned = await _copyToWorkDir(thumbPath, 'overlay', ext: 'png');
+      _setOverlay(owned);
+    } on Exception catch (e) {
+      debugPrint('마지막 프레임 추출 실패: $e');
+    } finally {
+      if (thumbPath != null && thumbPath != _overlayFile?.path) {
+        try {
+          final f = File(thumbPath);
+          if (f.existsSync()) await f.delete();
+        } catch (_) {}
+      }
     }
   }
 
@@ -348,16 +404,56 @@ class _CameraScreenState extends State<CameraScreen>
   // 파일 / 갤러리
   // ---------------------------------------------------------------------------
 
-  Future<File> _copyToAppDir(
+  Directory? _workDir;
+
+  /// 촬영 임시본을 두는 캐시 하위 폴더. OS가 저장공간 압박 시 정리할 수 있고,
+  /// 앱도 세션 시작 시 정리하므로 문서 디렉터리처럼 무한 누적되지 않는다.
+  Future<Directory> _ensureWorkDir() async {
+    final cached = _workDir;
+    if (cached != null) return cached;
+    final base = await getTemporaryDirectory();
+    final dir = Directory('${base.path}/ghost_work');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    _workDir = dir;
+    return dir;
+  }
+
+  Future<File> _copyToWorkDir(
     String sourcePath,
     String prefix, {
     String ext = 'jpg',
   }) async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await _ensureWorkDir();
     final name = '${prefix}_${DateTime.now().millisecondsSinceEpoch}.$ext';
     final dest = File('${dir.path}/$name');
     await File(sourcePath).copy(dest.path);
     return dest;
+  }
+
+  /// 작업 폴더가 소유한 파일이면 백그라운드로 삭제한다. (갤러리 사본과 무관)
+  void _deleteIfOwned(File file) {
+    final dir = _workDir;
+    if (dir == null || !file.path.startsWith(dir.path)) return;
+    unawaited(file.delete().catchError((Object _) => file));
+  }
+
+  /// 현재 오버레이로 쓰는 파일을 제외한 작업 폴더의 잔여 파일을 정리한다.
+  Future<void> _pruneWorkDir() async {
+    try {
+      final dir = await _ensureWorkDir();
+      final keep = _overlayFile?.path;
+      await for (final entry in dir.list()) {
+        if (entry is File && entry.path != keep) {
+          try {
+            await entry.delete();
+          } catch (_) {
+            // 개별 삭제 실패는 무시
+          }
+        }
+      }
+    } catch (_) {
+      // 정리 실패는 치명적이지 않음
+    }
   }
 
   Future<void> _saveImageToGallery(String path) async {
@@ -412,30 +508,31 @@ class _CameraScreenState extends State<CameraScreen>
       }
 
       var position = await Geolocator.getLastKnownPosition();
-      position ??= await Geolocator.getCurrentPosition(
-        locationSettings:
-            const LocationSettings(accuracy: LocationAccuracy.medium),
-      ).timeout(const Duration(seconds: 8));
+      final stale = position == null ||
+          DateTime.now().difference(position.timestamp) >
+              const Duration(minutes: 2);
+      if (stale) {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings:
+              const LocationSettings(accuracy: LocationAccuracy.medium),
+        ).timeout(const Duration(seconds: 8));
+      }
 
       final marks = await Geocoding().placemarkFromCoordinates(
         position.latitude,
         position.longitude,
       );
       if (!mounted || marks.isEmpty) return;
-      final m = marks.first;
-      final tokens = <String?>[
-        m.administrativeArea,
-        m.locality,
-        m.subLocality,
-      ].map((e) => e?.trim()).where((e) => e != null && e.isNotEmpty).cast<String>().toList();
-      final place =
-          (tokens.length > 2 ? tokens.sublist(tokens.length - 2) : tokens)
-              .join(' ');
-      setState(() => _stampPlace = place.isEmpty ? null : place);
+      final mk = marks.first;
+      setState(() => _stampPlace = shortPlaceName(
+            mk.administrativeArea,
+            mk.locality,
+            mk.subLocality,
+          ));
     } on TimeoutException {
       _toast('위치를 확인하지 못해 날짜만 표시됩니다.');
-    } catch (_) {
-      // 그 외 실패도 날짜만
+    } on Exception catch (e) {
+      debugPrint('위치 확인 실패: $e');
     } finally {
       if (mounted) setState(() => _resolvingPlace = false);
     }
@@ -503,6 +600,7 @@ class _CameraScreenState extends State<CameraScreen>
             ? _MessageView(
                 message: _statusMessage!,
                 onOpenSettings: openAppSettings,
+                onRetry: _bootstrap,
               )
             : !_isReady
                 ? const Center(child: CircularProgressIndicator())
@@ -633,12 +731,7 @@ class _CameraScreenState extends State<CameraScreen>
                   size: btn,
                   iconSize: icon,
                   tooltip: '오버레이 제거',
-                  onTap: _overlayFile == null
-                      ? null
-                      : () => setState(() {
-                            _overlayFile = null;
-                            _overlayLocked = false;
-                          }),
+                  onTap: _overlayFile == null ? null : _clearOverlay,
                 ),
                 _BarButton(
                   icon: Icons.auto_mode,
@@ -931,18 +1024,23 @@ class _BarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 아이콘은 작아도 터치 영역은 최소 44 확보한다.
+    final hit = size < 44.0 ? 44.0 : size;
     return Tooltip(
       message: tooltip,
-      child: InkResponse(
-        onTap: onTap,
-        radius: size * 0.6,
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: Icon(
-            icon,
-            size: iconSize,
-            color: onTap == null ? Colors.white24 : color,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkResponse(
+          onTap: onTap,
+          radius: hit * 0.55,
+          child: SizedBox(
+            width: hit,
+            height: hit,
+            child: Icon(
+              icon,
+              size: iconSize,
+              color: onTap == null ? Colors.white24 : color,
+            ),
           ),
         ),
       ),
@@ -1002,10 +1100,15 @@ class _RoundButton extends StatelessWidget {
 }
 
 class _MessageView extends StatelessWidget {
-  const _MessageView({required this.message, required this.onOpenSettings});
+  const _MessageView({
+    required this.message,
+    required this.onOpenSettings,
+    required this.onRetry,
+  });
 
   final String message;
   final VoidCallback onOpenSettings;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -1023,9 +1126,19 @@ class _MessageView extends StatelessWidget {
               style: const TextStyle(color: Colors.white),
             ),
             const SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: onOpenSettings,
-              child: const Text('설정 열기'),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                OutlinedButton(
+                  onPressed: onRetry,
+                  child: const Text('다시 시도'),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton(
+                  onPressed: onOpenSettings,
+                  child: const Text('설정 열기'),
+                ),
+              ],
             ),
           ],
         ),

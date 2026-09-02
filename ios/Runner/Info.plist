@@ -12,6 +12,8 @@
 	<string>오버레이로 사용할 참조 사진을 불러오기 위해 사진 보관함에 접근합니다.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>촬영한 사진과 동영상을 사진 보관함에 저장합니다.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>사진에 촬영 장소를 표시하기 위해 위치를 사용합니다.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

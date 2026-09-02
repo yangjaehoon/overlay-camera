@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:gal/gal.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -10,6 +13,7 @@ import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart' as vt;
 
 import 'main.dart';
+import 'photo_stamp.dart';
 
 /// 라이브 카메라 프리뷰 위에 반투명 참조 사진(고스트)을 겹쳐 보여주고,
 /// 그 사진에 인물 위치·크기를 맞춰 사진/동영상을 촬영하는 화면.
@@ -42,6 +46,12 @@ class _CameraScreenState extends State<CameraScreen>
   // 무음 촬영: 셔터음이 강제되는 기기에서도 소리 없이 정지 이미지를 얻기 위해
   // 아주 짧게 동영상을 녹화한 뒤 첫 프레임을 추출하는 방식.
   bool _silentShutter = false;
+
+  // 날짜·장소 스탬프
+  bool _stampEnabled = false;
+  StampCorner _stampCorner = StampCorner.bottomRight;
+  String? _stampPlace;
+  bool _resolvingPlace = false;
 
   // 제스처 시작 시점 기준값
   double _gestureBaseScale = 1.0;
@@ -205,10 +215,11 @@ class _CameraScreenState extends State<CameraScreen>
         _toast('사진을 찍지 못했습니다.');
         return;
       }
-      await _saveImageToGallery(saved.path);
+      final finalFile = await _maybeStamp(saved);
+      await _saveImageToGallery(finalFile.path);
       if (_autoUseLastShot) {
         setState(() {
-          _overlayFile = saved;
+          _overlayFile = finalFile;
           _resetOverlayTransform();
         });
       }
@@ -262,6 +273,21 @@ class _CameraScreenState extends State<CameraScreen>
           // 임시 파일 정리 실패는 무시
         }
       }
+    }
+  }
+
+  /// 스탬프 옵션이 켜져 있으면 사진에 날짜·장소를 그려 넣은 새 파일을 돌려준다.
+  Future<File> _maybeStamp(File src) async {
+    if (!_stampEnabled) return src;
+    try {
+      return await stampPhoto(
+        src,
+        text: buildStampText(DateTime.now(), _stampPlace),
+        corner: _stampCorner,
+      );
+    } catch (_) {
+      _toast('스탬프를 적용하지 못해 원본으로 저장합니다.');
+      return src;
     }
   }
 
@@ -355,6 +381,67 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   // ---------------------------------------------------------------------------
+  // 날짜·장소 스탬프
+  // ---------------------------------------------------------------------------
+
+  void _toggleStamp() {
+    final next = !_stampEnabled;
+    setState(() => _stampEnabled = next);
+    // 켤 때마다 현재 위치를 다시 확인한다. (장소가 바뀐 뒤 다시 켜면 갱신)
+    if (next) _refreshStampPlace();
+  }
+
+  /// 현재 위치를 역지오코딩해 스탬프에 넣을 장소명을 갱신한다.
+  /// 권한이 없거나 실패하면 장소 없이 날짜만 찍힌다.
+  Future<void> _refreshStampPlace() async {
+    if (_resolvingPlace) return;
+    setState(() => _resolvingPlace = true);
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        _toast('위치 서비스가 꺼져 있어 날짜만 표시됩니다.');
+        return;
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        _toast('위치 권한이 없어 날짜만 표시됩니다.');
+        return;
+      }
+
+      var position = await Geolocator.getLastKnownPosition();
+      position ??= await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.medium),
+      ).timeout(const Duration(seconds: 8));
+
+      final marks = await Geocoding().placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+      if (!mounted || marks.isEmpty) return;
+      final m = marks.first;
+      final tokens = <String?>[
+        m.administrativeArea,
+        m.locality,
+        m.subLocality,
+      ].map((e) => e?.trim()).where((e) => e != null && e.isNotEmpty).cast<String>().toList();
+      final place =
+          (tokens.length > 2 ? tokens.sublist(tokens.length - 2) : tokens)
+              .join(' ');
+      setState(() => _stampPlace = place.isEmpty ? null : place);
+    } on TimeoutException {
+      _toast('위치를 확인하지 못해 날짜만 표시됩니다.');
+    } catch (_) {
+      // 그 외 실패도 날짜만
+    } finally {
+      if (mounted) setState(() => _resolvingPlace = false);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // 기타 컨트롤
   // ---------------------------------------------------------------------------
 
@@ -419,8 +506,10 @@ class _CameraScreenState extends State<CameraScreen>
                     _buildPreview(),
                     if (_overlayFile != null) _buildOverlay(),
                     _buildGrid(),
+                    if (_stampEnabled) _buildStampPreview(),
                     _buildTopBar(),
                     _buildRightControls(),
+                    if (_stampEnabled) _buildStampCornerPicker(),
                     _buildBottomBar(),
                   ],
                 ),
@@ -469,15 +558,20 @@ class _CameraScreenState extends State<CameraScreen>
       child: Align(
         alignment: Alignment.topCenter,
         child: Container(
-          margin: const EdgeInsets.only(top: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width - 16,
+          ),
           decoration: BoxDecoration(
             color: Colors.black38,
             borderRadius: BorderRadius.circular(28),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               IconButton(
                 icon: Icon(
                   _silentShutter ? Icons.volume_off : Icons.volume_up,
@@ -486,6 +580,14 @@ class _CameraScreenState extends State<CameraScreen>
                 tooltip: '무음 촬영',
                 onPressed: () =>
                     setState(() => _silentShutter = !_silentShutter),
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.today,
+                  color: _stampEnabled ? Colors.amber : Colors.white,
+                ),
+                tooltip: '날짜·장소 표시',
+                onPressed: _toggleStamp,
               ),
               IconButton(
                 icon: Icon(_flashIcon, color: Colors.white),
@@ -528,7 +630,116 @@ class _CameraScreenState extends State<CameraScreen>
                 onPressed: () =>
                     setState(() => _autoUseLastShot = !_autoUseLastShot),
               ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 선택한 모서리에 찍힐 스탬프 문구 미리보기.
+  Widget _buildStampPreview() {
+    final placeHint = _stampPlace ?? (_resolvingPlace ? '위치 확인 중…' : null);
+    return IgnorePointer(
+      child: SafeArea(
+        minimum: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Align(
+          alignment: _stampCorner.alignment,
+          child: Padding(
+            // 상단은 상단 바+위치 선택 패널, 하단은 하단 컨트롤과 겹치지 않도록 여백.
+            padding: EdgeInsets.only(
+              top: _stampCorner.isTop ? 172 : 0,
+              bottom: _stampCorner.isTop ? 0 : 96,
+            ),
+            child: Text(
+              buildStampText(DateTime.now(), placeHint),
+              textAlign: _stampCorner.isLeft ? TextAlign.left : TextAlign.right,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                height: 1.25,
+                shadows: [
+                  Shadow(color: Colors.black87, blurRadius: 4),
+                  Shadow(color: Colors.black54, blurRadius: 8),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 스탬프 위치(4모서리) 선택 패널.
+  Widget _buildStampCornerPicker() {
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: Container(
+          margin: const EdgeInsets.only(top: 60),
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+          decoration: BoxDecoration(
+            color: Colors.black38,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '스탬프 위치',
+                style: TextStyle(color: Colors.white, fontSize: 11),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _stampCornerButton(StampCorner.topLeft),
+                  _stampCornerButton(StampCorner.topRight),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _stampCornerButton(StampCorner.bottomLeft),
+                  _stampCornerButton(StampCorner.bottomRight),
+                ],
+              ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _stampCornerButton(StampCorner corner) {
+    final active = _stampCorner == corner;
+    return Padding(
+      padding: const EdgeInsets.all(3),
+      child: Material(
+        color: active ? Colors.amber : Colors.white24,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => setState(() => _stampCorner = corner),
+          child: SizedBox(
+            width: 50,
+            height: 36,
+            child: Align(
+              alignment: corner.alignment,
+              child: Padding(
+                padding: const EdgeInsets.all(5),
+                child: Container(
+                  width: 16,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: active ? Colors.black87 : Colors.white70,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),

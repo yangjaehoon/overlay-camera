@@ -1,17 +1,37 @@
-# ghost_camera
+# Ghost Camera
 
-A new Flutter project.
+라이브 카메라 프리뷰 위에 반투명 참조 사진(고스트)을 겹쳐 보여주고, 그 사진에 인물의
+위치·크기를 맞춰 사진/동영상을 촬영하는 앱. 옷 갈아입기 점프컷처럼 피사체를 같은
+자리에 고정한 영상을 손으로 들고도 찍을 수 있게 도와준다.
 
-## Getting Started
+## 기능
 
-This project is a starting point for a Flutter application.
+- 전체 화면 카메라 프리뷰 + 3분할 정렬 그리드
+- 고스트 오버레이
+  - 갤러리에서 참조 사진 선택
+  - 촬영(사진/동영상) 후 마지막 컷을 자동으로 오버레이로 설정 (자동 모드 토글)
+  - 프리뷰 중 현재 화면을 스냅샷해서 오버레이로 사용
+  - 핀치 확대/축소, 드래그 이동, 두 손가락 회전
+  - 투명도 슬라이더 (세로), 위치 초기화, 오버레이 고정/해제
+- 사진 촬영 → 갤러리(`GhostCamera` 앨범) 저장
+- 동영상 녹화/정지 → 갤러리 저장, 마지막 프레임 추출
+- 전면/후면 전환, 플래시 off/auto/on/torch 순환
 
-A few resources to get you started if this is your first Flutter project:
+## 실행
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```
+flutter pub get
+flutter run
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 구조
+
+- `lib/main.dart` — 앱 진입점, 카메라 목록 조회
+- `lib/camera_screen.dart` — 카메라 + 오버레이 화면 전체
+
+## 참고
+
+- 안드로이드 툴체인은 `android/settings.gradle.kts`에서 AGP 8.11.1 / Kotlin 2.2.20으로
+  고정. AGP 9에서는 `video_thumbnail` 빌드가 실패하고, `camera`는 AGP 8.9.1 이상을 요구한다.
+- 손으로 들고 찍을 때는 완벽한 정합이 어렵다. 삼각대로 대략 고정한 뒤 고스트로 미세
+  조정하는 방식을 권장한다.

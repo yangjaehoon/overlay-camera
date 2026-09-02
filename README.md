@@ -32,10 +32,16 @@ flutter run
 
 ## 구조
 
-- `lib/main.dart` — 앱 진입점, 카메라 목록 조회
-- `lib/camera_screen.dart` — 카메라 + 오버레이 화면 전체
+- `lib/main.dart` — 앱 진입점
+- `lib/camera_screen.dart` — 화면 조립 + 오버레이 상태 + 촬영 흐름 조율
+- `lib/camera_session.dart` — 카메라 컨트롤러 생명주기·촬영 프리미티브(ChangeNotifier)
+- `lib/location_stamp_controller.dart` — 날짜·장소 스탬프 상태·위치 조회(ChangeNotifier)
+- `lib/work_dir.dart` — 촬영 임시본 관리(캐시 폴더)
+- `lib/gallery_store.dart` — 갤러리 저장
 - `lib/photo_stamp.dart` — 사진에 날짜·장소 텍스트를 그려 넣는 유틸
 - `lib/settings_store.dart` — 설정 영속화(SharedPreferences)
+- `lib/ui_metrics.dart` — 반응형 치수 계산
+- `lib/camera_widgets.dart` — 재사용 위젯(버튼·안내 화면·그리드)
 
 ## 설정 영속화
 

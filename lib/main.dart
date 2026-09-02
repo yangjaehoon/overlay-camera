@@ -1,17 +1,9 @@
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
 import 'camera_screen.dart';
 
-List<CameraDescription> cameras = <CameraDescription>[];
-
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    cameras = await availableCameras();
-  } on CameraException catch (e) {
-    debugPrint('카메라 목록을 불러오지 못했습니다: ${e.code}');
-  }
   runApp(const GhostCameraApp());
 }
 

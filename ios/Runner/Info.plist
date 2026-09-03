@@ -14,10 +14,12 @@
 	<string>촬영한 사진과 동영상을 사진 보관함에 저장합니다.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>사진에 촬영 장소를 표시하기 위해 위치를 사용합니다.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Ghost Camera</string>
+	<string>Ghost Cam</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

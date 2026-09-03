@@ -9,6 +9,17 @@ import 'package:video_thumbnail/video_thumbnail.dart' as vt;
 import 'settings_store.dart';
 import 'work_dir.dart';
 
+const _flashOrder = [
+  FlashMode.off,
+  FlashMode.auto,
+  FlashMode.always,
+  FlashMode.torch,
+];
+
+/// 플래시 버튼을 눌렀을 때 다음 모드 (off → auto → always → torch → off).
+FlashMode nextFlashMode(FlashMode current) =>
+    _flashOrder[(_flashOrder.indexOf(current) + 1) % _flashOrder.length];
+
 /// 카메라 컨트롤러의 생명주기와 촬영(사진·무음·동영상)을 담당한다.
 /// 상태 변경 시 [notifyListeners]로 알리고, 안내 메시지는 [onMessage]로 전달한다.
 class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
@@ -199,13 +210,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> cycleFlash() async {
     if (!isReady) return;
-    const order = [
-      FlashMode.off,
-      FlashMode.auto,
-      FlashMode.always,
-      FlashMode.torch,
-    ];
-    final next = order[(order.indexOf(_flashMode) + 1) % order.length];
+    final next = nextFlashMode(_flashMode);
     try {
       await _controller!.setFlashMode(next);
       _flashMode = next;

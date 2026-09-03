@@ -12,6 +12,7 @@ import 'camera_session.dart';
 import 'camera_widgets.dart';
 import 'gallery_store.dart';
 import 'location_stamp_controller.dart';
+import 'overlay_controller.dart';
 import 'photo_stamp.dart';
 import 'settings_store.dart';
 import 'ui_metrics.dart';
@@ -33,8 +34,10 @@ IconData _flashIcon(FlashMode mode) {
 /// 라이브 카메라 프리뷰 위에 반투명 참조 사진(고스트)을 겹쳐 보여주고,
 /// 그 사진에 인물 위치·크기를 맞춰 사진/동영상을 촬영하는 화면.
 ///
-/// 카메라 생명주기·촬영은 [CameraSession], 날짜·장소 스탬프는
-/// [LocationStampController]가 담당하고, 이 위젯은 오버레이 상태와 화면 조립만 맡는다.
+/// 상태는 세 컨트롤러가 나눠 갖는다: [CameraSession](카메라·촬영),
+/// [LocationStampController](날짜·장소 스탬프), [OverlayController](고스트 오버레이).
+/// 화면은 컨트롤러별 [ListenableBuilder]로 서브트리를 나눠, 한 컨트롤러의 갱신이
+/// 무관한 서브트리(예: 오버레이 드래그 → 카메라 프리뷰)를 리빌드하지 않게 한다.
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
 
@@ -48,45 +51,27 @@ class _CameraScreenState extends State<CameraScreen> {
 
   late final CameraSession _session;
   late final LocationStampController _stamp;
+  late final OverlayController _overlay;
   late final GalleryStore _gallery;
 
   SettingsStore? _settings;
-
-  // 고스트 오버레이 상태
-  File? _overlayFile;
-  double _overlayOpacity = 0.45;
-  Offset _overlayOffset = Offset.zero;
-  double _overlayScale = 1.0;
-  double _overlayRotation = 0.0;
-  bool _overlayLocked = false;
-  bool _autoUseLastShot = true;
-
-  // 제스처 시작 시점 기준값
-  double _gestureBaseScale = 1.0;
-  double _gestureBaseRotation = 0.0;
 
   @override
   void initState() {
     super.initState();
     _session = CameraSession(workDir: _workDir, onMessage: _toast)..attach();
     _stamp = LocationStampController(onMessage: _toast);
+    _overlay = OverlayController(workDir: _workDir);
     _gallery = GalleryStore(onMessage: _toast);
-    _session.addListener(_onControllerChange);
-    _stamp.addListener(_onControllerChange);
     unawaited(_bootstrap());
   }
 
   @override
   void dispose() {
-    _session.removeListener(_onControllerChange);
-    _stamp.removeListener(_onControllerChange);
     _session.dispose();
     _stamp.dispose();
+    _overlay.dispose();
     super.dispose();
-  }
-
-  void _onControllerChange() {
-    if (mounted) setState(() {});
   }
 
   Future<void> _bootstrap() async {
@@ -98,10 +83,7 @@ class _CameraScreenState extends State<CameraScreen> {
         _session.settings = s;
         _session.hydrate(s);
         _stamp.hydrate(s);
-        setState(() {
-          _autoUseLastShot = s.autoUseLastShot;
-          _overlayOpacity = s.overlayOpacity;
-        });
+        _overlay.hydrate(s);
       } on Exception catch (e) {
         debugPrint('설정 로드 실패: $e');
       }
@@ -109,70 +91,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
     await _session.bootstrap();
     if (!mounted) return;
-    unawaited(_workDir.prune(keepPath: _overlayFile?.path));
-  }
-
-  // ---------------------------------------------------------------------------
-  // 오버레이 조작
-  // ---------------------------------------------------------------------------
-
-  void _onScaleStart(ScaleStartDetails details) {
-    _gestureBaseScale = _overlayScale;
-    _gestureBaseRotation = _overlayRotation;
-  }
-
-  void _onScaleUpdate(ScaleUpdateDetails details) {
-    setState(() {
-      _overlayScale = (_gestureBaseScale * details.scale).clamp(0.15, 6.0);
-      _overlayRotation = _gestureBaseRotation + details.rotation;
-      _overlayOffset += details.focalPointDelta;
-    });
-  }
-
-  void _resetOverlayTransform() {
-    setState(() {
-      _overlayOffset = Offset.zero;
-      _overlayScale = 1.0;
-      _overlayRotation = 0.0;
-    });
-  }
-
-  /// 오버레이 이미지를 교체한다. 이전 파일이 작업 폴더 소유면 삭제한다.
-  void _setOverlay(File file) {
-    if (!mounted) return;
-    final old = _overlayFile;
-    setState(() => _overlayFile = file);
-    _resetOverlayTransform();
-    if (old != null && old.path != file.path) _workDir.deleteIfOwned(old);
-  }
-
-  void _clearOverlay() {
-    final old = _overlayFile;
-    setState(() {
-      _overlayFile = null;
-      _overlayLocked = false;
-    });
-    if (old != null) _workDir.deleteIfOwned(old);
-  }
-
-  Future<void> _pickOverlayFromGallery() async {
-    try {
-      final picked = await _picker.pickImage(source: ImageSource.gallery);
-      if (picked == null) return;
-      _setOverlay(File(picked.path));
-    } on Exception catch (e) {
-      debugPrint('오버레이 이미지 불러오기 실패: $e');
-      _toast('갤러리에서 이미지를 불러오지 못했습니다.');
-    }
-  }
-
-  void _setOpacity(double value) {
-    setState(() => _overlayOpacity = value);
-  }
-
-  void _toggleAutoOverlay() {
-    setState(() => _autoUseLastShot = !_autoUseLastShot);
-    _settings?.setAutoUseLastShot(_autoUseLastShot);
+    unawaited(_workDir.prune(keepPath: _overlay.file?.path));
   }
 
   // ---------------------------------------------------------------------------
@@ -190,8 +109,8 @@ class _CameraScreenState extends State<CameraScreen> {
       final finalFile = await _stamp.applyTo(raw);
       if (finalFile.path != raw.path) _workDir.deleteIfOwned(raw);
       await _gallery.saveImage(finalFile.path);
-      if (_autoUseLastShot) {
-        _setOverlay(finalFile);
+      if (_overlay.autoUseLast) {
+        _overlay.setFile(finalFile);
       } else {
         _workDir.deleteIfOwned(finalFile);
       }
@@ -209,7 +128,7 @@ class _CameraScreenState extends State<CameraScreen> {
         _toast('스냅샷을 찍지 못했습니다.');
         return;
       }
-      _setOverlay(file);
+      _overlay.setFile(file);
       _toast('현재 화면을 오버레이로 사용합니다.');
     });
   }
@@ -217,7 +136,7 @@ class _CameraScreenState extends State<CameraScreen> {
   Future<void> _toggleRecording() async {
     await _session.toggleRecording(onStopped: (mp4) async {
       await _gallery.saveVideo(mp4.path);
-      if (_autoUseLastShot) {
+      if (_overlay.autoUseLast) {
         await _setOverlayFromVideoLastFrame(mp4.path);
       }
       _workDir.deleteIfOwned(mp4);
@@ -244,11 +163,11 @@ class _CameraScreenState extends State<CameraScreen> {
       );
       if (thumbPath == null) return;
       final owned = await _workDir.copyInto(thumbPath, 'overlay', ext: 'png');
-      _setOverlay(owned);
+      _overlay.setFile(owned);
     } on Exception catch (e) {
       debugPrint('마지막 프레임 추출 실패: $e');
     } finally {
-      if (thumbPath != null && thumbPath != _overlayFile?.path) {
+      if (thumbPath != null && thumbPath != _overlay.file?.path) {
         try {
           final f = File(thumbPath);
           if (f.existsSync()) await f.delete();
@@ -257,9 +176,16 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // 기타
-  // ---------------------------------------------------------------------------
+  Future<void> _pickOverlayFromGallery() async {
+    try {
+      final picked = await _picker.pickImage(source: ImageSource.gallery);
+      if (picked == null) return;
+      _overlay.setFile(File(picked.path));
+    } on Exception catch (e) {
+      debugPrint('오버레이 이미지 불러오기 실패: $e');
+      _toast('갤러리에서 이미지를 불러오지 못했습니다.');
+    }
+  }
 
   void _toast(String message) {
     if (!mounted) return;
@@ -282,33 +208,71 @@ class _CameraScreenState extends State<CameraScreen> {
       // 시스템 글꼴 확대가 카메라 HUD를 깨뜨리지 않도록 배율을 제한한다.
       body: MediaQuery.withClampedTextScaling(
         maxScaleFactor: 1.3,
-        child: _session.statusMessage != null
-            ? MessageView(
+        // 카메라 상태(에러/준비)만 게이트에서 처리하고, 준비된 화면은 child로 넘겨
+        // 잦은 세션 알림에도 Stack 자체는 다시 만들지 않는다.
+        child: ListenableBuilder(
+          listenable: _session,
+          builder: (context, child) {
+            if (_session.statusMessage != null) {
+              return MessageView(
                 message: _session.statusMessage!,
                 onOpenSettings: openAppSettings,
                 onRetry: _bootstrap,
-              )
-            : !_session.isReady
-                ? const Center(child: CircularProgressIndicator())
-                : Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      _buildPreview(),
-                      if (_overlayFile != null) _buildOverlay(),
-                      _buildGrid(),
-                      if (_stamp.enabled) _buildStampPreview(m),
-                      _buildTopBar(m),
-                      _buildRightControls(m),
-                      if (_stamp.enabled) _buildStampCornerPicker(m),
-                      _buildBottomBar(m),
-                    ],
-                  ),
+              );
+            }
+            if (!_session.isReady) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return child!;
+          },
+          child: _buildReadyStack(m),
+        ),
       ),
     );
   }
 
+  Widget _buildReadyStack(Metrics m) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ListenableBuilder(
+          listenable: _session,
+          builder: (_, _) => _buildPreview(),
+        ),
+        ListenableBuilder(
+          listenable: _overlay,
+          builder: (_, _) => _buildOverlay(),
+        ),
+        _buildGrid(),
+        ListenableBuilder(
+          listenable: _stamp,
+          builder: (_, _) => _buildStampPreview(m),
+        ),
+        ListenableBuilder(
+          listenable: Listenable.merge([_session, _stamp, _overlay]),
+          builder: (_, _) => _buildTopBar(m),
+        ),
+        ListenableBuilder(
+          listenable: _overlay,
+          builder: (_, _) => _buildRightControls(m),
+        ),
+        ListenableBuilder(
+          listenable: _stamp,
+          builder: (_, _) => _buildStampCornerPicker(m),
+        ),
+        ListenableBuilder(
+          listenable: _session,
+          builder: (_, _) => _buildBottomBar(m),
+        ),
+      ],
+    );
+  }
+
   Widget _buildPreview() {
-    final controller = _session.controller!;
+    final controller = _session.controller;
+    if (controller == null || !controller.value.isInitialized) {
+      return const SizedBox.shrink();
+    }
     final mediaSize = MediaQuery.of(context).size;
     var scale = mediaSize.aspectRatio * controller.value.aspectRatio;
     if (scale < 1) scale = 1 / scale;
@@ -322,18 +286,20 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Widget _buildOverlay() {
-    Widget image = Image.file(_overlayFile!, fit: BoxFit.contain);
-    image = Transform.scale(scale: _overlayScale, child: image);
-    image = Transform.rotate(angle: _overlayRotation, child: image);
-    image = Transform.translate(offset: _overlayOffset, child: image);
-    image = Opacity(opacity: _overlayOpacity, child: image);
+    final file = _overlay.file;
+    if (file == null) return const SizedBox.shrink();
+    Widget image = Image.file(file, fit: BoxFit.contain, gaplessPlayback: true);
+    image = Transform.scale(scale: _overlay.scale, child: image);
+    image = Transform.rotate(angle: _overlay.rotation, child: image);
+    image = Transform.translate(offset: _overlay.offset, child: image);
+    image = Opacity(opacity: _overlay.opacity, child: image);
 
-    if (_overlayLocked) {
+    if (_overlay.locked) {
       return IgnorePointer(child: image);
     }
     return GestureDetector(
-      onScaleStart: _onScaleStart,
-      onScaleUpdate: _onScaleUpdate,
+      onScaleStart: _overlay.onScaleStart,
+      onScaleUpdate: _overlay.onScaleUpdate,
       child: image,
     );
   }
@@ -348,7 +314,7 @@ class _CameraScreenState extends State<CameraScreen> {
     final btn = m.spc(38, 34.0, 52.0);
     final icon = m.spc(21, 19.0, 28.0);
     final maxW = m.size.width - m.sp(16);
-    final hasOverlay = _overlayFile != null;
+    final hasOverlay = _overlay.hasFile;
 
     return SafeArea(
       child: Align(
@@ -393,14 +359,12 @@ class _CameraScreenState extends State<CameraScreen> {
                   onTap: _session.cycleFlash,
                 ),
                 BarButton(
-                  icon: _overlayLocked ? Icons.lock : Icons.lock_open,
-                  color: _overlayLocked ? Colors.amber : Colors.white,
+                  icon: _overlay.locked ? Icons.lock : Icons.lock_open,
+                  color: _overlay.locked ? Colors.amber : Colors.white,
                   size: btn,
                   iconSize: icon,
                   tooltip: '오버레이 고정',
-                  onTap: hasOverlay
-                      ? () => setState(() => _overlayLocked = !_overlayLocked)
-                      : null,
+                  onTap: hasOverlay ? _overlay.toggleLock : null,
                 ),
                 BarButton(
                   icon: Icons.restart_alt,
@@ -408,7 +372,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   size: btn,
                   iconSize: icon,
                   tooltip: '오버레이 위치 초기화',
-                  onTap: hasOverlay ? _resetOverlayTransform : null,
+                  onTap: hasOverlay ? _overlay.resetTransform : null,
                 ),
                 BarButton(
                   icon: Icons.hide_image_outlined,
@@ -416,15 +380,15 @@ class _CameraScreenState extends State<CameraScreen> {
                   size: btn,
                   iconSize: icon,
                   tooltip: '오버레이 제거',
-                  onTap: hasOverlay ? _clearOverlay : null,
+                  onTap: hasOverlay ? _overlay.clear : null,
                 ),
                 BarButton(
                   icon: Icons.auto_mode,
-                  color: _autoUseLastShot ? Colors.amber : Colors.white,
+                  color: _overlay.autoUseLast ? Colors.amber : Colors.white,
                   size: btn,
                   iconSize: icon,
                   tooltip: '촬영 후 마지막 컷을 오버레이로',
-                  onTap: _toggleAutoOverlay,
+                  onTap: _overlay.toggleAutoUseLast,
                 ),
               ],
             ),
@@ -436,6 +400,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
   /// 선택한 모서리에 찍힐 스탬프 문구 미리보기.
   Widget _buildStampPreview(Metrics m) {
+    if (!_stamp.enabled) return const SizedBox.shrink();
     // 위/아래 컨트롤과 겹치지 않도록 스케일된 컴포넌트 높이만큼 여백을 둔다.
     final topClear = m.sp(52) + m.sp(34) * 2 + m.sp(40) + m.sp(12);
     final bottomClear = m.sp(58) + m.sp(22) + m.sp(18);
@@ -472,6 +437,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
   /// 스탬프 위치(4모서리) 선택 패널.
   Widget _buildStampCornerPicker(Metrics m) {
+    if (!_stamp.enabled) return const SizedBox.shrink();
     return SafeArea(
       child: Align(
         alignment: Alignment.topCenter,
@@ -552,7 +518,7 @@ class _CameraScreenState extends State<CameraScreen> {
     final sliderLen = (m.size.height * 0.30)
         .clamp(140.0, m.isTablet ? 420.0 : 260.0)
         .toDouble();
-    final hasOverlay = _overlayFile != null;
+    final hasOverlay = _overlay.hasFile;
     return SafeArea(
       child: Align(
         alignment: Alignment.centerRight,
@@ -580,17 +546,15 @@ class _CameraScreenState extends State<CameraScreen> {
                           const RoundSliderOverlayShape(overlayRadius: 14),
                     ),
                     child: Slider(
-                      value: _overlayOpacity,
-                      onChanged: hasOverlay ? _setOpacity : null,
-                      onChangeEnd: hasOverlay
-                          ? (v) => _settings?.setOverlayOpacity(v)
-                          : null,
+                      value: _overlay.opacity,
+                      onChanged: hasOverlay ? _overlay.setOpacity : null,
+                      onChangeEnd: hasOverlay ? _overlay.commitOpacity : null,
                     ),
                   ),
                 ),
               ),
               Text(
-                '${(_overlayOpacity * 100).round()}%',
+                '${(_overlay.opacity * 100).round()}%',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: m.spc(12, 11.0, 16.0),

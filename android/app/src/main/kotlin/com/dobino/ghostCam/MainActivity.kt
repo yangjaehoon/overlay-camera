@@ -1,4 +1,4 @@
-package com.dobino.ghost_camera
+package com.dobino.ghostCam
 
 import io.flutter.embedding.android.FlutterActivity
 

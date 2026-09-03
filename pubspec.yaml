@@ -1,5 +1,5 @@
 name: ghost_camera
-description: "A new Flutter project."
+description: "반투명 참조 사진(고스트)에 맞춰 사진·동영상을 촬영하는 카메라 앱."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev

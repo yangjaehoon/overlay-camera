@@ -20,12 +20,20 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   /// 설정 저장소. 로드 후 주입된다.
   SettingsStore? settings;
 
+  /// 촬영 해상도. 사진·무음 캡처·영상 마지막 프레임 화질을 모두 결정한다.
+  /// (올리면 stampPhoto 메모리 사용량도 비례해 커진다)
+  static const _resolution = ResolutionPreset.high;
+
+  /// 무음 촬영 시 몰래 녹화하는 길이. 첫 프레임만 뽑으므로 짧을수록 좋다.
+  static const _silentClipDuration = Duration(milliseconds: 550);
+
   final List<CameraDescription> _cameras = [];
   CameraController? _controller;
   int _index = 0;
   FlashMode _flashMode = FlashMode.off;
   bool _isRecording = false;
   bool _busy = false;
+  bool _bootstrapping = false;
   String? _statusMessage;
   bool _silentShutter = false;
   bool _disposed = false;
@@ -73,7 +81,8 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     // inactive는 알림 배너·제어센터·자체 권한 다이얼로그에서도 발생하므로
     // 프리뷰가 불필요하게 깜빡이지 않도록 paused/hidden에서만 해제한다.
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
       final controller = _controller;
       _controller = null;
       // 진행 중이던 촬영이 끊기면 상태가 잠길 수 있어 함께 되돌린다.
@@ -91,49 +100,56 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// 권한 요청 → 카메라 목록 조회 → 저장된 렌즈로 초기화.
+  /// 진행 중 재호출(재시도 버튼 연타 등)은 무시한다.
   Future<void> bootstrap() async {
-    _statusMessage = null;
-    _notify();
-
-    Map<Permission, PermissionStatus> statuses;
+    if (_bootstrapping) return;
+    _bootstrapping = true;
     try {
-      statuses = await <Permission>[
-        Permission.camera,
-        Permission.microphone,
-      ].request();
-    } on Exception catch (e) {
-      debugPrint('권한 요청 실패: $e');
-      statuses = const {};
-    }
-
-    if (statuses[Permission.camera] != PermissionStatus.granted) {
-      _statusMessage = '카메라 권한이 필요합니다. 설정에서 허용해 주세요.';
+      _statusMessage = null;
       _notify();
-      return;
-    }
 
-    if (_cameras.isEmpty) {
+      Map<Permission, PermissionStatus> statuses;
       try {
-        _cameras.addAll(await availableCameras());
-      } on CameraException catch (e) {
-        debugPrint('카메라 목록 조회 실패: $e');
+        statuses = await <Permission>[
+          Permission.camera,
+          Permission.microphone,
+        ].request();
+      } on Exception catch (e) {
+        debugPrint('권한 요청 실패: $e');
+        statuses = const {};
       }
-    }
-    if (_cameras.isEmpty) {
-      _statusMessage = '사용 가능한 카메라를 찾지 못했습니다.';
-      _notify();
-      return;
-    }
 
-    final savedDir = settings?.lensDirection ?? CameraLensDirection.back;
-    var idx = _cameras.indexWhere((c) => c.lensDirection == savedDir);
-    if (idx < 0) {
-      idx = _cameras.indexWhere(
-        (c) => c.lensDirection == CameraLensDirection.back,
-      );
+      if (statuses[Permission.camera] != PermissionStatus.granted) {
+        _statusMessage = '카메라 권한이 필요합니다. 설정에서 허용해 주세요.';
+        _notify();
+        return;
+      }
+
+      if (_cameras.isEmpty) {
+        try {
+          _cameras.addAll(await availableCameras());
+        } on CameraException catch (e) {
+          debugPrint('카메라 목록 조회 실패: $e');
+        }
+      }
+      if (_cameras.isEmpty) {
+        _statusMessage = '사용 가능한 카메라를 찾지 못했습니다.';
+        _notify();
+        return;
+      }
+
+      final savedDir = settings?.lensDirection ?? CameraLensDirection.back;
+      var idx = _cameras.indexWhere((c) => c.lensDirection == savedDir);
+      if (idx < 0) {
+        idx = _cameras.indexWhere(
+          (c) => c.lensDirection == CameraLensDirection.back,
+        );
+      }
+      _index = idx >= 0 ? idx : 0;
+      await _initCamera(_index);
+    } finally {
+      _bootstrapping = false;
     }
-    _index = idx >= 0 ? idx : 0;
-    await _initCamera(_index);
   }
 
   Future<void> retry() => bootstrap();
@@ -142,7 +158,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     final previous = _controller;
     final controller = CameraController(
       _cameras[index],
-      ResolutionPreset.high,
+      _resolution,
       enableAudio: true,
       imageFormatGroup: ImageFormatGroup.jpeg,
     );
@@ -247,7 +263,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     String? framePath;
     try {
       await controller.startVideoRecording();
-      await Future<void>.delayed(const Duration(milliseconds: 550));
+      await Future<void>.delayed(_silentClipDuration);
       final clip = await controller.stopVideoRecording();
       clipPath = clip.path;
 

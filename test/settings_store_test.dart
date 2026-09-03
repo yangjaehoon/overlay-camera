@@ -20,11 +20,11 @@ void main() {
   test('저장 후 다시 읽으면 값이 유지된다', () async {
     SharedPreferences.setMockInitialValues({});
     final s = await SettingsStore.load();
-    await s.setSilentShutter(true);
-    await s.setStampCorner(StampCorner.topLeft);
-    await s.setOverlayOpacity(0.8);
-    await s.setFlashMode(FlashMode.torch);
-    await s.setLensDirection(CameraLensDirection.front);
+    s.setSilentShutter(true);
+    s.setStampCorner(StampCorner.topLeft);
+    s.setOverlayOpacity(0.8);
+    s.setFlashMode(FlashMode.torch);
+    s.setLensDirection(CameraLensDirection.front);
 
     final again = await SettingsStore.load();
     expect(again.silentShutter, true);

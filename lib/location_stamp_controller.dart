@@ -18,6 +18,12 @@ class LocationStampController extends ChangeNotifier {
   /// 설정 저장소. 로드 후 주입된다.
   SettingsStore? settings;
 
+  /// getLastKnownPosition이 이보다 오래됐으면 현재 위치를 새로 받는다.
+  static const _positionMaxAge = Duration(minutes: 2);
+
+  /// 현재 위치 조회 타임아웃.
+  static const _locationTimeout = Duration(seconds: 8);
+
   bool _enabled = false;
   StampCorner _corner = StampCorner.bottomRight;
   String? _place;
@@ -78,7 +84,8 @@ class LocationStampController extends ChangeNotifier {
     if (!_enabled) return src;
     try {
       return await stampPhoto(src, text: textNow(), corner: _corner);
-    } on Exception catch (e) {
+    } catch (e) {
+      // 렌더링·인코딩의 어떤 실패든 원본을 그대로 저장하는 쪽으로 강등한다.
       debugPrint('스탬프 적용 실패: $e');
       onMessage?.call('스탬프를 적용하지 못해 원본으로 저장합니다.');
       return src;
@@ -108,13 +115,12 @@ class LocationStampController extends ChangeNotifier {
 
       var position = await Geolocator.getLastKnownPosition();
       final stale = position == null ||
-          DateTime.now().difference(position.timestamp) >
-              const Duration(minutes: 2);
+          DateTime.now().difference(position.timestamp) > _positionMaxAge;
       if (stale) {
         position = await Geolocator.getCurrentPosition(
           locationSettings:
               const LocationSettings(accuracy: LocationAccuracy.medium),
-        ).timeout(const Duration(seconds: 8));
+        ).timeout(_locationTimeout);
       }
 
       final marks = await Geocoding().placemarkFromCoordinates(

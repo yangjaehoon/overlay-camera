@@ -3,7 +3,7 @@ import 'package:gal/gal.dart';
 
 /// 갤러리(사진 보관함) 저장. 실패 시 [onMessage]로 안내한다.
 class GalleryStore {
-  GalleryStore({this.onMessage, this.album = 'GhostCamera'});
+  GalleryStore({this.onMessage, this.album = 'Ghost Cam'});
 
   final void Function(String message)? onMessage;
   final String album;

@@ -17,6 +17,19 @@ import 'settings_store.dart';
 import 'ui_metrics.dart';
 import 'work_dir.dart';
 
+IconData _flashIcon(FlashMode mode) {
+  switch (mode) {
+    case FlashMode.off:
+      return Icons.flash_off;
+    case FlashMode.auto:
+      return Icons.flash_auto;
+    case FlashMode.always:
+      return Icons.flash_on;
+    case FlashMode.torch:
+      return Icons.highlight;
+  }
+}
+
 /// 라이브 카메라 프리뷰 위에 반투명 참조 사진(고스트)을 겹쳐 보여주고,
 /// 그 사진에 인물 위치·크기를 맞춰 사진/동영상을 촬영하는 화면.
 ///
@@ -60,7 +73,7 @@ class _CameraScreenState extends State<CameraScreen> {
     _gallery = GalleryStore(onMessage: _toast);
     _session.addListener(_onControllerChange);
     _stamp.addListener(_onControllerChange);
-    _bootstrap();
+    unawaited(_bootstrap());
   }
 
   @override
@@ -147,7 +160,8 @@ class _CameraScreenState extends State<CameraScreen> {
       final picked = await _picker.pickImage(source: ImageSource.gallery);
       if (picked == null) return;
       _setOverlay(File(picked.path));
-    } catch (_) {
+    } on Exception catch (e) {
+      debugPrint('오버레이 이미지 불러오기 실패: $e');
       _toast('갤러리에서 이미지를 불러오지 못했습니다.');
     }
   }
@@ -219,7 +233,9 @@ class _CameraScreenState extends State<CameraScreen> {
       final durationMs = vp.value.duration.inMilliseconds;
       await vp.dispose();
 
-      final targetMs = durationMs > 200 ? durationMs - 120 : 0;
+      // 정지 직전 프레임(끝에서 살짝 앞)을 노린다.
+      const endOffsetMs = 120;
+      final targetMs = durationMs > 200 ? durationMs - endOffsetMs : 0;
       thumbPath = await vt.VideoThumbnail.thumbnailFile(
         video: videoPath,
         imageFormat: vt.ImageFormat.PNG,
@@ -244,19 +260,6 @@ class _CameraScreenState extends State<CameraScreen> {
   // ---------------------------------------------------------------------------
   // 기타
   // ---------------------------------------------------------------------------
-
-  IconData _flashIcon(FlashMode mode) {
-    switch (mode) {
-      case FlashMode.off:
-        return Icons.flash_off;
-      case FlashMode.auto:
-        return Icons.flash_auto;
-      case FlashMode.always:
-        return Icons.flash_on;
-      case FlashMode.torch:
-        return Icons.highlight;
-    }
-  }
 
   void _toast(String message) {
     if (!mounted) return;

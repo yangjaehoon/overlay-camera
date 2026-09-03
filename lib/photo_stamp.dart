@@ -15,19 +15,6 @@ extension StampCornerX on StampCorner {
   bool get isTop =>
       this == StampCorner.topLeft || this == StampCorner.topRight;
 
-  String get label {
-    switch (this) {
-      case StampCorner.topLeft:
-        return '왼쪽 위';
-      case StampCorner.topRight:
-        return '오른쪽 위';
-      case StampCorner.bottomLeft:
-        return '왼쪽 아래';
-      case StampCorner.bottomRight:
-        return '오른쪽 아래';
-    }
-  }
-
   Alignment get alignment {
     switch (this) {
       case StampCorner.topLeft:

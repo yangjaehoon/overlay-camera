@@ -117,7 +117,7 @@ class TopBar extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: m.sp(4)),
           constraints: BoxConstraints(maxWidth: m.isTablet ? 560.0 : maxW),
           decoration: BoxDecoration(
-            color: Colors.black38,
+            color: Colors.black54,
             borderRadius: BorderRadius.circular(m.sp(28)),
           ),
           child: SingleChildScrollView(
@@ -203,9 +203,10 @@ class StampPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!stamp.enabled) return const SizedBox.shrink();
     final m = metrics;
-    // 위/아래 컨트롤과 겹치지 않도록 스케일된 컴포넌트 높이만큼 여백을 둔다.
-    final topClear = m.sp(52) + m.sp(34) * 2 + m.sp(40) + m.sp(12);
-    final bottomClear = m.sp(58) + m.sp(22) + m.sp(18);
+    // 위쪽은 상단 바 + 위치 선택 패널, 아래쪽은 하단 촬영 바를 확실히 피하도록
+    // 스케일된 컴포넌트 높이 + 여유 간격만큼 띄운다.
+    final topClear = m.sp(52) + m.sp(34) * 2 + m.sp(48) + m.sp(24);
+    final bottomClear = m.sp(58) + m.sp(24) + m.sp(44);
     final corner = stamp.corner;
     return IgnorePointer(
       child: SafeArea(
@@ -260,7 +261,7 @@ class StampCornerPicker extends StatelessWidget {
           margin: EdgeInsets.only(top: m.sp(52)),
           padding: EdgeInsets.fromLTRB(m.sp(10), m.sp(8), m.sp(10), m.sp(10)),
           decoration: BoxDecoration(
-            color: Colors.black38,
+            color: Colors.black54,
             borderRadius: BorderRadius.circular(m.sp(16)),
           ),
           child: Column(
@@ -369,7 +370,7 @@ class RightControls extends StatelessWidget {
           margin: EdgeInsets.only(right: m.sp(6)),
           padding: EdgeInsets.symmetric(vertical: m.sp(12)),
           decoration: BoxDecoration(
-            color: Colors.black38,
+            color: Colors.black54,
             borderRadius: BorderRadius.circular(m.sp(24)),
           ),
           child: Column(

@@ -33,6 +33,14 @@ class WorkDir {
     return dest;
   }
 
+  /// 작업 폴더 안에 아직 존재하지 않는 새 파일 경로를 예약한다.
+  /// (파일 복사가 아니라 직접 내용을 만들어 써야 하는 경우, 예: 이미지 가공 결과)
+  Future<File> reserve(String prefix, {String ext = 'jpg'}) async {
+    final dir = await _ensure();
+    final name = '${prefix}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    return File('${dir.path}/$name');
+  }
+
   /// [file]이 이 작업 폴더가 소유한 파일이면 백그라운드로 삭제한다.
   void deleteIfOwned(File file) {
     final dir = _dir;

@@ -49,7 +49,7 @@ class _CameraScreenState extends State<CameraScreen> {
     super.initState();
     _session = CameraSession(workDir: _workDir, onMessage: _toast)..attach();
     _stamp = LocationStampController(onMessage: _toast);
-    _overlay = OverlayController(workDir: _workDir);
+    _overlay = OverlayController(workDir: _workDir, onMessage: _toast);
     _grid = GridController();
     _gallery = GalleryStore(onMessage: _toast);
     unawaited(_bootstrap());

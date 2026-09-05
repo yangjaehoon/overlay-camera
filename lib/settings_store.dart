@@ -23,6 +23,7 @@ class SettingsStore {
   static const _kFlash = 'flashMode';
   static const _kLens = 'lensDirection';
   static const _kGrid = 'gridType';
+  static const _kOutline = 'overlayOutline';
 
   bool get silentShutter => _prefs.getBool(_kSilent) ?? false;
   void setSilentShutter(bool v) => _prefs.setBool(_kSilent, v);
@@ -61,6 +62,9 @@ class SettingsStore {
   GridType get gridType =>
       _enumByIndex(GridType.values, _prefs.getInt(_kGrid), GridType.thirds);
   void setGridType(GridType v) => _prefs.setInt(_kGrid, v.index);
+
+  bool get overlayOutline => _prefs.getBool(_kOutline) ?? false;
+  void setOverlayOutline(bool v) => _prefs.setBool(_kOutline, v);
 
   static T _enumByIndex<T>(List<T> values, int? index, T fallback) =>
       (index != null && index >= 0 && index < values.length)

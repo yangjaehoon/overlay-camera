@@ -17,6 +17,7 @@ void main() {
     expect(s.flashMode, FlashMode.off);
     expect(s.lensDirection, CameraLensDirection.back);
     expect(s.gridType, GridType.thirds);
+    expect(s.overlayOutline, false);
   });
 
   test('저장 후 다시 읽으면 값이 유지된다', () async {
@@ -28,6 +29,7 @@ void main() {
     s.setFlashMode(FlashMode.torch);
     s.setLensDirection(CameraLensDirection.front);
     s.setGridType(GridType.goldenRatio);
+    s.setOverlayOutline(true);
 
     final again = await SettingsStore.load();
     expect(again.silentShutter, true);
@@ -36,6 +38,7 @@ void main() {
     expect(again.flashMode, FlashMode.torch);
     expect(again.lensDirection, CameraLensDirection.front);
     expect(again.gridType, GridType.goldenRatio);
+    expect(again.overlayOutline, true);
   });
 
   test('손상된 enum 인덱스는 기본값으로 폴백', () async {

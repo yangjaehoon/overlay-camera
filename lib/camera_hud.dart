@@ -55,8 +55,9 @@ class OverlayLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final file = overlay.file;
-    if (file == null) return const SizedBox.shrink();
+    if (!overlay.hasFile) return const SizedBox.shrink();
+    // displayFile: 윤곽선 모드면 추출된 윤곽선(처리 중이면 원본)을 보여준다.
+    final file = overlay.displayFile!;
 
     Widget image = Image.file(file, fit: BoxFit.contain, gaplessPlayback: true);
     image = Transform.scale(scale: overlay.scale, child: image);
@@ -479,7 +480,56 @@ class RightControls extends StatelessWidget {
                   fontSize: m.spc(12, 11.0, 16.0),
                 ),
               ),
+              SizedBox(height: m.sp(10)),
+              _OutlineToggle(overlay: overlay, metrics: m),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 사진 대신 흰색 윤곽선만 보여주는 모드 토글. 밝고 복잡한 배경에서
+/// 반투명 사진보다 정합선이 더 잘 보이도록 하는 용도.
+class _OutlineToggle extends StatelessWidget {
+  const _OutlineToggle({required this.overlay, required this.metrics});
+
+  final OverlayController overlay;
+  final Metrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = metrics;
+    final hasOverlay = overlay.hasFile;
+    final size = m.spc(32, 28.0, 40.0);
+    return Tooltip(
+      message: '흰색 윤곽선으로 보기',
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: hasOverlay ? overlay.toggleOutline : null,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: overlay.tracingOutline
+                ? Padding(
+                    padding: EdgeInsets.all(m.sp(7)),
+                    child: const CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.amber,
+                    ),
+                  )
+                : Icon(
+                    Icons.gesture,
+                    size: m.spc(20, 18.0, 26.0),
+                    color: !hasOverlay
+                        ? Colors.white24
+                        : overlay.outlineMode
+                            ? Colors.amber
+                            : Colors.white,
+                  ),
           ),
         ),
       ),

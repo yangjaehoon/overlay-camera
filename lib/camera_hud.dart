@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:camera/camera.dart';
 import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/material.dart';
@@ -155,7 +157,7 @@ class GridOverlay extends StatelessWidget {
 double shapeGuideDiameter(ShapeGuide s, Size screen) =>
     (s.size * screen.shortestSide).clamp(24.0, screen.shortestSide * 2).toDouble();
 
-/// 사용자가 배치한 원/정사각형 가이드 도형들(선만). 삭제 배지는 [ShapeGuideBadges]가
+/// 사용자가 배치한 원/정사각형 가이드 도형들(선만). 삭제·크기 컨트롤은 [ShapeGuideControls]가
 /// HUD 위 최상단 레이어에서 따로 그린다(패널에 가려 못 누르는 일이 없도록).
 ///
 /// 편집 모드가 아니면 [IgnorePointer]로 감싸 터치를 통과시킨다(그 아래 오버레이·
@@ -265,11 +267,11 @@ class _ShapeGuideItemState extends State<_ShapeGuideItem> {
   }
 }
 
-/// 도형별 조작 컨트롤(오른쪽 위 = 삭제 배지, 오른쪽 아래 = 크기 조절 핸들).
-/// HUD 패널 위에 그려서 도형을 화면 구석으로 밀어도 항상 조작할 수 있다.
+/// 편집 모드에서 도형마다 뜨는 조작 컨트롤(오른쪽 위 = 삭제, 오른쪽 아래 = 크기 조절).
+/// HUD 패널 위 최상단 레이어에서 그려 도형을 화면 구석으로 밀어도 조작할 수 있다.
 /// 편집 모드가 아니거나 도형이 없으면 아무것도 그리지 않는다.
-class ShapeGuideBadges extends StatelessWidget {
-  const ShapeGuideBadges({
+class ShapeGuideControls extends StatelessWidget {
+  const ShapeGuideControls({
     super.key,
     required this.guide,
     required this.metrics,
@@ -280,78 +282,119 @@ class ShapeGuideBadges extends StatelessWidget {
   final Metrics metrics;
   final void Function(String message)? onMessage;
 
-  static const _badge = 44.0;
-
   @override
   Widget build(BuildContext context) {
     final screen = metrics.size;
     if (guide.isEmpty || !guide.editing || screen.shortestSide <= 0) {
       return const SizedBox.shrink();
     }
-    final pad = MediaQuery.paddingOf(context);
-    // 컨트롤이 상태바/제스처바 안쪽에 오도록 안전 영역만큼 뺀다.
-    final minX = pad.left + 4;
-    final maxX = screen.width - pad.right - 4 - _badge;
-    final minY = pad.top + 4;
-    final maxY = screen.height - pad.bottom - 4 - _badge;
-    double clampX(double v) => v.clamp(minX, maxX < minX ? minX : maxX);
-    double clampY(double v) => v.clamp(minY, maxY < minY ? minY : maxY);
-
+    final p = MediaQuery.paddingOf(context);
+    // 컨트롤이 상태바/제스처바 안쪽에 오도록 안전 영역 + 여백만큼 뺀다.
+    final safe = EdgeInsets.fromLTRB(
+      p.left + 4,
+      p.top + 4,
+      p.right + 4,
+      p.bottom + 4,
+    );
     return Stack(
       children: [
-        for (final shape in guide.shapes) ...[
-          _positioned(
-            key: ValueKey('${shape.id}_del'),
-            // 오른쪽 위 모서리
-            x: clampX(shape.cx * screen.width +
-                shapeGuideDiameter(shape, screen) / 2 -
-                _badge / 2),
-            y: clampY(shape.cy * screen.height -
-                shapeGuideDiameter(shape, screen) / 2 -
-                _badge / 2),
-            child: _DeleteBadge(
-              size: _badge,
-              onTap: () {
-                guide.remove(shape.id);
-                onMessage?.call('도형을 삭제했습니다.');
-              },
-            ),
+        for (final shape in guide.shapes)
+          _ShapeControls(
+            key: ValueKey(shape.id),
+            shape: shape,
+            guide: guide,
+            screen: screen,
+            safe: safe,
+            onMessage: onMessage,
           ),
-          _positioned(
-            key: ValueKey('${shape.id}_size'),
-            // 오른쪽 아래 모서리
-            x: clampX(shape.cx * screen.width +
-                shapeGuideDiameter(shape, screen) / 2 -
-                _badge / 2),
-            y: clampY(shape.cy * screen.height +
-                shapeGuideDiameter(shape, screen) / 2 -
-                _badge / 2),
-            child: _ResizeHandle(
-              key: ValueKey('${shape.id}_size_h'),
-              size: _badge,
-              shape: shape,
-              guide: guide,
-              screenSize: screen,
-            ),
-          ),
-        ],
       ],
     );
   }
-
-  Widget _positioned({
-    required Key key,
-    required double x,
-    required double y,
-    required Widget child,
-  }) =>
-      Positioned(key: key, left: x, top: y, child: child);
 }
 
-/// 도형 오른쪽 아래 모서리의 크기 조절 핸들. 중심에서 멀어질수록 커진다.
+/// 한 도형의 삭제 배지 + 크기 핸들. 안전 영역 안으로 클램프하고, 둘이 겹칠
+/// 상황(작은 도형·구석)이면 벌려서 둘 다 누를 수 있게 한다.
+class _ShapeControls extends StatelessWidget {
+  const _ShapeControls({
+    super.key,
+    required this.shape,
+    required this.guide,
+    required this.screen,
+    required this.safe,
+    this.onMessage,
+  });
+
+  final ShapeGuide shape;
+  final ShapeGuideController guide;
+  final Size screen;
+  final EdgeInsets safe;
+  final void Function(String message)? onMessage;
+
+  static const _size = 44.0; // 최소 터치 타깃
+  static const _gap = 4.0; // 두 컨트롤 사이 최소 간격
+
+  @override
+  Widget build(BuildContext context) {
+    final d = shapeGuideDiameter(shape, screen);
+    final cx = shape.cx * screen.width;
+    final cy = shape.cy * screen.height;
+
+    final minX = safe.left;
+    final maxX = math.max(minX, screen.width - safe.right - _size);
+    final minY = safe.top;
+    final maxY = math.max(minY, screen.height - safe.bottom - _size);
+
+    // 이상적 위치: 도형 오른쪽 위 / 오른쪽 아래 모서리 → 화면 안으로 클램프.
+    final rightX = (cx + d / 2 - _size / 2).clamp(minX, maxX);
+    var delX = rightX;
+    var delY = (cy - d / 2 - _size / 2).clamp(minY, maxY);
+    var sizeX = rightX;
+    var sizeY = (cy + d / 2 - _size / 2).clamp(minY, maxY);
+
+    // 클램프 후 두 컨트롤이 겹치면 떼어놓는다(크기 핸들을 삭제 배지 아래로).
+    final need = _size + _gap;
+    if ((delX - sizeX).abs() < _size && (delY - sizeY).abs() < need) {
+      if (delY + need <= maxY) {
+        sizeY = delY + need;
+      } else if (sizeY - need >= minY) {
+        delY = sizeY - need;
+      } else {
+        sizeX = math.max(minX, delX - need); // 세로 공간이 없으면 가로로 분리
+      }
+    }
+
+    return Stack(
+      children: [
+        Positioned(
+          left: delX,
+          top: delY,
+          child: _DeleteBadge(
+            size: _size,
+            onTap: () {
+              guide.remove(shape.id);
+              onMessage?.call('도형을 삭제했습니다.');
+            },
+          ),
+        ),
+        Positioned(
+          left: sizeX,
+          top: sizeY,
+          child: _ResizeHandle(
+            size: _size,
+            shape: shape,
+            guide: guide,
+            screenSize: screen,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 도형 오른쪽 아래 모서리의 크기 조절 핸들.
+/// 손가락을 중심 바깥쪽으로 밀면 커지고 안쪽으로 당기면 작아진다(중심 고정).
 class _ResizeHandle extends StatefulWidget {
   const _ResizeHandle({
-    super.key,
     required this.size,
     required this.shape,
     required this.guide,
@@ -368,18 +411,32 @@ class _ResizeHandle extends StatefulWidget {
 }
 
 class _ResizeHandleState extends State<_ResizeHandle> {
-  double _baseDiameter = 0;
-  double _accum = 0;
+  Offset _startFinger = Offset.zero;
+  Offset _outward = Offset.zero; // 제스처 시작 시 중심→핸들 방향 단위벡터
+  double _startDiameter = 0;
+  bool _pressed = false;
 
-  void _onPanStart(DragStartDetails _) {
-    _baseDiameter = shapeGuideDiameter(widget.shape, widget.screenSize);
-    _accum = 0;
+  void _onPanStart(DragStartDetails d) {
+    final s = widget.shape;
+    // 리사이즈는 위치를 바꾸지 않으므로 중심은 고정. 시작 시 한 번만 계산.
+    final center = Offset(
+      s.cx * widget.screenSize.width,
+      s.cy * widget.screenSize.height,
+    );
+    _startFinger = d.globalPosition;
+    final v = _startFinger - center;
+    _outward = v / math.max(1.0, v.distance);
+    _startDiameter = shapeGuideDiameter(s, widget.screenSize);
+    setState(() => _pressed = true);
   }
 
   void _onPanUpdate(DragUpdateDetails d) {
-    // 핸들을 오른쪽·아래로 끌면 지름이 그만큼 커진다(양 축 이동량의 합).
-    _accum += d.delta.dx + d.delta.dy;
-    final newDiameter = _baseDiameter + _accum;
+    // 시작 지점 대비 손가락이 "바깥 방향"으로 이동한 성분(부호 있음)을 지름 증감으로
+    // 환산한다. 모서리 대각선이라 √2 보정. 절대 위치 기반이라 한계를 넘겼다
+    // 되돌려도 갇히지 않고 바로 반응한다.
+    final moved = d.globalPosition - _startFinger;
+    final proj = moved.dx * _outward.dx + moved.dy * _outward.dy;
+    final newDiameter = _startDiameter + proj * 2 / math.sqrt2;
     widget.guide.dragUpdate(
       widget.shape.id,
       pixelDelta: Offset.zero,
@@ -388,7 +445,10 @@ class _ResizeHandleState extends State<_ResizeHandle> {
     );
   }
 
-  void _onPanEnd(DragEndDetails _) => widget.guide.commit();
+  void _finish() {
+    widget.guide.commit();
+    if (mounted) setState(() => _pressed = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -400,17 +460,21 @@ class _ResizeHandleState extends State<_ResizeHandle> {
         dragStartBehavior: DragStartBehavior.down,
         onPanStart: _onPanStart,
         onPanUpdate: _onPanUpdate,
-        onPanEnd: _onPanEnd,
+        onPanEnd: (_) => _finish(),
+        onPanCancel: _finish,
         child: SizedBox(
           width: widget.size,
           height: widget.size,
           child: Center(
-            child: Container(
-              width: 26,
-              height: 26,
-              decoration: const BoxDecoration(
-                color: Colors.black54,
-                shape: BoxShape.circle,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 100),
+              width: _pressed ? 30 : 26,
+              height: _pressed ? 30 : 26,
+              decoration: BoxDecoration(
+                color: _pressed ? Colors.black87 : Colors.black54,
+                // 원형인 삭제 배지와 구분되도록 둥근 사각형.
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white70, width: 1.5),
               ),
               child: const Icon(
                 Icons.open_in_full,

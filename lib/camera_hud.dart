@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'camera_session.dart';
 import 'camera_widgets.dart';
+import 'grid_controller.dart';
 import 'location_stamp_controller.dart';
 import 'overlay_controller.dart';
 import 'photo_stamp.dart';
@@ -125,12 +126,23 @@ class OverlayQuickClear extends StatelessWidget {
 
 /// 3분할 정렬 그리드.
 class GridOverlay extends StatelessWidget {
-  const GridOverlay({super.key});
+  const GridOverlay({super.key, required this.type});
+
+  final GridType type;
+
+  static const _goldenRatio = 0.382; // (1 - 1/phi), 나머지 선은 1 - 이 값
 
   @override
   Widget build(BuildContext context) {
+    final fractions = switch (type) {
+      GridType.none => const <double>[],
+      GridType.thirds => const [1 / 3, 2 / 3],
+      GridType.quarters => const [1 / 4, 2 / 4, 3 / 4],
+      GridType.goldenRatio => const [_goldenRatio, 1 - _goldenRatio],
+    };
+    if (fractions.isEmpty) return const SizedBox.shrink();
     return IgnorePointer(
-      child: CustomPaint(painter: GridPainter(), size: Size.infinite),
+      child: CustomPaint(painter: GridPainter(fractions), size: Size.infinite),
     );
   }
 }
@@ -142,13 +154,17 @@ class TopBar extends StatelessWidget {
     required this.session,
     required this.stamp,
     required this.overlay,
+    required this.grid,
     required this.metrics,
+    required this.onOpenGridSettings,
   });
 
   final CameraSession session;
   final LocationStampController stamp;
   final OverlayController overlay;
+  final GridController grid;
   final Metrics metrics;
+  final VoidCallback onOpenGridSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -199,6 +215,16 @@ class TopBar extends StatelessWidget {
                   iconSize: icon,
                   tooltip: '플래시',
                   onTap: session.cycleFlash,
+                ),
+                BarButton(
+                  icon: grid.type.icon,
+                  color: grid.type == GridType.none
+                      ? Colors.white
+                      : Colors.amber,
+                  size: btn,
+                  iconSize: icon,
+                  tooltip: '그리드 설정',
+                  onTap: onOpenGridSettings,
                 ),
                 BarButton(
                   icon: overlay.locked ? Icons.lock : Icons.lock_open,
@@ -538,6 +564,108 @@ class BottomBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 그리드 상세 설정 바텀시트를 띄운다.
+Future<void> showGridSettingsSheet(BuildContext context, GridController grid) {
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: const Color(0xFF1C1C1E),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (sheetContext) => _GridSettingsSheet(grid: grid),
+  );
+}
+
+class _GridSettingsSheet extends StatelessWidget {
+  const _GridSettingsSheet({required this.grid});
+
+  final GridController grid;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '그리드',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            for (final type in GridType.values)
+              ListenableBuilder(
+                listenable: grid,
+                builder: (context, _) => _GridOptionTile(
+                  type: type,
+                  selected: grid.type == type,
+                  onTap: () => grid.select(type),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GridOptionTile extends StatelessWidget {
+  const _GridOptionTile({
+    required this.type,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final GridType type;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(
+        type.icon,
+        color: selected ? Colors.amber : Colors.white70,
+      ),
+      title: Text(
+        type.label,
+        style: TextStyle(
+          color: selected ? Colors.amber : Colors.white,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+        ),
+      ),
+      subtitle: Text(
+        type.description,
+        style: const TextStyle(color: Colors.white54, fontSize: 12),
+      ),
+      trailing: selected
+          ? const Icon(Icons.check, color: Colors.amber)
+          : null,
+      onTap: onTap,
     );
   }
 }

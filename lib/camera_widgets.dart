@@ -147,21 +147,27 @@ class MessageView extends StatelessWidget {
   }
 }
 
-/// 3분할 정렬 그리드.
+/// 촬영 가이드 그리드. [fractions]에 준 비율 위치에 세로·가로선을 긋는다.
+/// 예: 3분할 = [1/3, 2/3], 4분할 = [1/4, 2/4, 3/4].
 class GridPainter extends CustomPainter {
+  const GridPainter(this.fractions);
+
+  final List<double> fractions;
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = Colors.white24
       ..strokeWidth = 1;
-    for (var i = 1; i < 3; i++) {
-      final dx = size.width * i / 3;
-      final dy = size.height * i / 3;
+    for (final f in fractions) {
+      final dx = size.width * f;
+      final dy = size.height * f;
       canvas.drawLine(Offset(dx, 0), Offset(dx, size.height), paint);
       canvas.drawLine(Offset(0, dy), Offset(size.width, dy), paint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant GridPainter oldDelegate) =>
+      oldDelegate.fractions != fractions;
 }

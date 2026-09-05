@@ -1,5 +1,6 @@
 import 'package:camera/camera.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ghost_camera/grid_controller.dart';
 import 'package:ghost_camera/photo_stamp.dart';
 import 'package:ghost_camera/settings_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,6 +16,7 @@ void main() {
     expect(s.stampCorner, StampCorner.bottomRight);
     expect(s.flashMode, FlashMode.off);
     expect(s.lensDirection, CameraLensDirection.back);
+    expect(s.gridType, GridType.thirds);
   });
 
   test('저장 후 다시 읽으면 값이 유지된다', () async {
@@ -25,6 +27,7 @@ void main() {
     s.setOverlayOpacity(0.8);
     s.setFlashMode(FlashMode.torch);
     s.setLensDirection(CameraLensDirection.front);
+    s.setGridType(GridType.goldenRatio);
 
     final again = await SettingsStore.load();
     expect(again.silentShutter, true);
@@ -32,6 +35,7 @@ void main() {
     expect(again.overlayOpacity, 0.8);
     expect(again.flashMode, FlashMode.torch);
     expect(again.lensDirection, CameraLensDirection.front);
+    expect(again.gridType, GridType.goldenRatio);
   });
 
   test('손상된 enum 인덱스는 기본값으로 폴백', () async {
@@ -39,10 +43,12 @@ void main() {
       'stampCorner': 99,
       'flashMode': -1,
       'lensDirection': 'nonsense',
+      'gridType': 42,
     });
     final s = await SettingsStore.load();
     expect(s.stampCorner, StampCorner.bottomRight);
     expect(s.flashMode, FlashMode.off);
     expect(s.lensDirection, CameraLensDirection.back);
+    expect(s.gridType, GridType.thirds);
   });
 }

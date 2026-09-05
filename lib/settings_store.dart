@@ -1,6 +1,7 @@
 import 'package:camera/camera.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'grid_controller.dart';
 import 'photo_stamp.dart';
 
 /// 사용자 설정을 SharedPreferences에 영속화한다.
@@ -21,6 +22,7 @@ class SettingsStore {
   static const _kOpacity = 'overlayOpacity';
   static const _kFlash = 'flashMode';
   static const _kLens = 'lensDirection';
+  static const _kGrid = 'gridType';
 
   bool get silentShutter => _prefs.getBool(_kSilent) ?? false;
   void setSilentShutter(bool v) => _prefs.setBool(_kSilent, v);
@@ -55,6 +57,10 @@ class SettingsStore {
 
   void setLensDirection(CameraLensDirection v) =>
       _prefs.setString(_kLens, v.name);
+
+  GridType get gridType =>
+      _enumByIndex(GridType.values, _prefs.getInt(_kGrid), GridType.thirds);
+  void setGridType(GridType v) => _prefs.setInt(_kGrid, v.index);
 
   static T _enumByIndex<T>(List<T> values, int? index, T fallback) =>
       (index != null && index >= 0 && index < values.length)

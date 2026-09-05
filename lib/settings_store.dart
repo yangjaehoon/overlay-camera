@@ -26,7 +26,6 @@ class SettingsStore {
   static const _kGrid = 'gridType';
   static const _kOutline = 'overlayOutline';
   static const _kShapes = 'shapeGuides';
-  static const _kShapesLocked = 'shapeGuidesLocked';
   static const _kShapePresets = 'shapeGuidePresets';
 
   bool get silentShutter => _prefs.getBool(_kSilent) ?? false;
@@ -74,9 +73,6 @@ class SettingsStore {
       decodeShapeGuides(_prefs.getString(_kShapes));
   void setShapeGuides(List<ShapeGuide> shapes) =>
       _prefs.setString(_kShapes, encodeShapeGuides(shapes));
-
-  bool get shapeGuidesLocked => _prefs.getBool(_kShapesLocked) ?? false;
-  void setShapeGuidesLocked(bool v) => _prefs.setBool(_kShapesLocked, v);
 
   List<ShapeGuidePreset> get shapeGuidePresets =>
       decodeShapeGuidePresets(_prefs.getString(_kShapePresets));

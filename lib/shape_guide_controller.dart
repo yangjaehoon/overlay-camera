@@ -8,6 +8,10 @@ import 'shape_guide.dart';
 
 /// 화면 위에 자유롭게 배치하는 원/정사각형 가이드 도형들의 상태.
 /// 위치·크기는 화면 비율로 저장되어 앱을 재시작해도 유지된다.
+///
+/// 도형은 기본적으로 "가이드"로만 그려져 터치를 통과시킨다(그 아래 오버레이·카메라
+/// 조작을 막지 않음). [editing]을 켜야 드래그·크기조절·삭제가 가능해진다.
+/// 편집 모드는 저장하지 않는다(앱을 다시 켜면 항상 가이드 상태).
 class ShapeGuideController extends ChangeNotifier {
   ShapeGuideController({this.onMessage});
 
@@ -21,7 +25,7 @@ class ShapeGuideController extends ChangeNotifier {
 
   List<ShapeGuide> _shapes = const [];
   List<ShapeGuidePreset> _presets = const [];
-  bool _locked = false;
+  bool _editing = false;
   bool _disposed = false;
 
   /// 설정 저장소. 로드 후 주입된다.
@@ -30,7 +34,9 @@ class ShapeGuideController extends ChangeNotifier {
   /// 외부에서 리스트를 직접 바꿔 알림/저장을 건너뛰지 못하도록 읽기 전용 뷰로 노출.
   UnmodifiableListView<ShapeGuide> get shapes => UnmodifiableListView(_shapes);
   bool get isEmpty => _shapes.isEmpty;
-  bool get locked => _locked;
+
+  /// 편집 모드. 켜면 도형을 드래그·크기조절·삭제할 수 있다.
+  bool get editing => _editing;
 
   /// 사용자가 이름 붙여 저장한 배치들.
   UnmodifiableListView<ShapeGuidePreset> get presets =>
@@ -50,8 +56,14 @@ class ShapeGuideController extends ChangeNotifier {
   void hydrate(SettingsStore s) {
     settings = s;
     _shapes = s.shapeGuides;
-    _locked = s.shapeGuidesLocked;
     _presets = s.shapeGuidePresets;
+    _notify();
+  }
+
+  /// 편집 모드를 켜고 끈다.
+  void setEditing(bool value) {
+    if (value == _editing) return;
+    _editing = value;
     _notify();
   }
 
@@ -71,6 +83,7 @@ class ShapeGuideController extends ChangeNotifier {
         size: 0.35,
       ),
     ];
+    _editing = true; // 방금 추가했으니 바로 배치할 수 있게 편집 모드로.
     _persist();
     _notify();
   }
@@ -86,13 +99,8 @@ class ShapeGuideController extends ChangeNotifier {
   void clearAll() {
     if (_shapes.isEmpty) return;
     _shapes = const [];
+    _editing = false; // 지울 게 없으니 편집 모드 종료.
     _persist();
-    _notify();
-  }
-
-  void toggleLock() {
-    _locked = !_locked;
-    settings?.setShapeGuidesLocked(_locked);
     _notify();
   }
 
@@ -186,6 +194,7 @@ class ShapeGuideController extends ChangeNotifier {
           size: s.size,
         ),
     ];
+    _editing = false; // 불러온 배치는 바로 촬영 가이드로 쓰도록 편집 모드 해제.
     _persist(); // 불러온 배치를 현재 작업 배치로도 저장
     onMessage?.call('"${preset.name}" 배치를 불러왔습니다.');
     _notify();

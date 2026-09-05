@@ -117,15 +117,59 @@ void main() {
     c.dispose();
   });
 
-  test('toggleLock 은 잠금 상태를 뒤집는다', () {
-    final c = ShapeGuideController();
-    expect(c.locked, false);
-    c.toggleLock();
-    expect(c.locked, true);
-    c.dispose();
+  group('편집 모드', () {
+    test('기본값은 꺼짐, setEditing 으로 켜고 끈다', () {
+      final c = ShapeGuideController();
+      expect(c.editing, false);
+      c.setEditing(true);
+      expect(c.editing, true);
+      c.setEditing(false);
+      expect(c.editing, false);
+      c.dispose();
+    });
+
+    test('같은 값으로 setEditing 하면 알림하지 않는다', () {
+      final c = ShapeGuideController();
+      var notified = 0;
+      c.addListener(() => notified++);
+      c.setEditing(false); // 이미 false
+      expect(notified, 0);
+      c.dispose();
+    });
+
+    test('도형을 추가하면 편집 모드가 켜진다', () {
+      final c = ShapeGuideController();
+      expect(c.editing, false);
+      c.addCircle();
+      expect(c.editing, true);
+      c.dispose();
+    });
+
+    test('모두 삭제하면 편집 모드가 꺼진다', () {
+      final c = ShapeGuideController();
+      c.addCircle();
+      expect(c.editing, true);
+      c.clearAll();
+      expect(c.editing, false);
+      c.dispose();
+    });
+
+    test('편집 모드는 저장되지 않는다(hydrate 후 항상 꺼짐)', () async {
+      SharedPreferences.setMockInitialValues({});
+      final s = await SettingsStore.load();
+      final a = ShapeGuideController()..settings = s;
+      a.addCircle(); // editing = true
+      expect(a.editing, true);
+
+      final b = ShapeGuideController()..hydrate(await SettingsStore.load());
+      expect(b.shapes.length, 1); // 도형은 복원
+      expect(b.editing, false); // 편집 모드는 복원 안 함
+      a.dispose();
+      b.dispose();
+    });
   });
 
-  test('설정 저장소에 도형과 잠금이 영속화되고 hydrate 로 복원된다', () async {
+  test('설정 저장소에 도형이 영속화되고 hydrate 로 복원된다', () async {
     SharedPreferences.setMockInitialValues({});
     final s = await SettingsStore.load();
 
@@ -135,14 +179,12 @@ void main() {
     a.dragUpdate(a.shapes.first.id,
         pixelDelta: const Offset(20, 40), screenSize: screen);
     a.commit();
-    a.toggleLock();
     final expectedCount = a.shapes.length;
     final expectedCx = a.shapes.first.cx;
 
     final again = await SettingsStore.load();
     final b = ShapeGuideController()..hydrate(again);
     expect(b.shapes.length, expectedCount);
-    expect(b.locked, true);
     expect(b.shapes.first.cx, closeTo(expectedCx, 1e-9));
 
     a.dispose();
@@ -225,6 +267,17 @@ void main() {
       expect(c.shapes.single.type, ShapeGuideType.circle);
       expect(c.shapes.single.cx, closeTo(savedCx, 1e-9));
 
+      c.dispose();
+    });
+
+    test('loadPreset 은 편집 모드를 끈다(바로 촬영 가이드로)', () {
+      final c = ShapeGuideController();
+      c.addCircle(); // editing = true
+      c.savePreset('원');
+      expect(c.editing, true);
+
+      c.loadPreset(c.presets.single.id);
+      expect(c.editing, false);
       c.dispose();
     });
 

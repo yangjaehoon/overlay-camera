@@ -20,7 +20,6 @@ void main() {
     expect(s.gridType, GridType.thirds);
     expect(s.overlayOutline, false);
     expect(s.shapeGuides, isEmpty);
-    expect(s.shapeGuidesLocked, false);
     expect(s.shapeGuidePresets, isEmpty);
   });
 
@@ -43,7 +42,6 @@ void main() {
         size: 0.25,
       ),
     ]);
-    s.setShapeGuidesLocked(true);
     s.setShapeGuidePresets(const [
       ShapeGuidePreset(
         id: 'p1',
@@ -71,7 +69,6 @@ void main() {
     expect(again.shapeGuides.single.id, 's1');
     expect(again.shapeGuides.single.type, ShapeGuideType.circle);
     expect(again.shapeGuides.single.cx, 0.3);
-    expect(again.shapeGuidesLocked, true);
     expect(again.shapeGuidePresets.single.name, '인물용');
     expect(again.shapeGuidePresets.single.shapes.single.type,
         ShapeGuideType.square);

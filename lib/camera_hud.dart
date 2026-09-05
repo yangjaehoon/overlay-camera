@@ -156,6 +156,9 @@ double shapeGuideDiameter(ShapeGuide s, Size screen) =>
 
 /// 사용자가 배치한 원/정사각형 가이드 도형들(선만). 삭제 배지는 [ShapeGuideBadges]가
 /// HUD 위 최상단 레이어에서 따로 그린다(패널에 가려 못 누르는 일이 없도록).
+///
+/// 편집 모드가 아니면 [IgnorePointer]로 감싸 터치를 통과시킨다(그 아래 오버레이·
+/// 카메라 조작을 막지 않음). 편집 모드일 때만 드래그·크기조절 제스처를 받는다.
 class ShapeGuideLayer extends StatelessWidget {
   const ShapeGuideLayer({
     super.key,
@@ -231,7 +234,7 @@ class _ShapeGuideItemState extends State<_ShapeGuideItem> {
     final diameter = shapeGuideDiameter(s, screen);
     final left = s.cx * screen.width - diameter / 2;
     final top = s.cy * screen.height - diameter / 2;
-    final locked = widget.guide.locked;
+    final editing = widget.guide.editing;
 
     final shapeVisual = CustomPaint(
       size: Size(diameter, diameter),
@@ -241,29 +244,28 @@ class _ShapeGuideItemState extends State<_ShapeGuideItem> {
       ),
     );
 
-    // opaque: 도형 영역을 터치하면 이 제스처가 가로채고, 아래(오버레이 등)로는
-    // 전달하지 않는다 — 같은 지점에서 두 GestureDetector가 동시에 반응하는
-    // 충돌(제스처 아레나)을 막는다. 도형이 없는 빈 영역은 자연히 아래로 통과된다.
+    // 편집 모드가 아니면 터치를 통과시켜 아래 오버레이·카메라 조작을 막지 않는다.
+    // 편집 모드에서는 opaque 로 도형 위 터치를 이 제스처가 가로챈다(아래로 전달 X).
     return Positioned(
       left: left,
       top: top,
       width: diameter,
       height: diameter,
-      child: locked
-          ? IgnorePointer(child: shapeVisual)
-          : GestureDetector(
+      child: editing
+          ? GestureDetector(
               behavior: HitTestBehavior.opaque,
               onScaleStart: _onScaleStart,
               onScaleUpdate: _onScaleUpdate,
               onScaleEnd: _onScaleEnd,
               child: shapeVisual,
-            ),
+            )
+          : IgnorePointer(child: shapeVisual),
     );
   }
 }
 
 /// 도형별 삭제 배지. HUD 패널 위에 그려서 도형을 화면 구석으로 밀어도 항상 누를 수 있다.
-/// 잠금 상태이거나 도형이 없으면 아무것도 그리지 않는다.
+/// 편집 모드가 아니거나 도형이 없으면 아무것도 그리지 않는다.
 class ShapeGuideBadges extends StatelessWidget {
   const ShapeGuideBadges({
     super.key,
@@ -281,7 +283,7 @@ class ShapeGuideBadges extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screen = metrics.size;
-    if (guide.isEmpty || guide.locked || screen.shortestSide <= 0) {
+    if (guide.isEmpty || !guide.editing || screen.shortestSide <= 0) {
       return const SizedBox.shrink();
     }
     final pad = MediaQuery.paddingOf(context);
@@ -387,6 +389,64 @@ class _DeleteBadge extends StatelessWidget {
                 ),
                 child:
                     const Icon(Icons.close, color: Colors.redAccent, size: 18),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 편집 모드일 때 화면 하단 가운데에 뜨는 "편집 완료" 알약 버튼.
+/// 시트를 다시 열지 않고도 편집 모드를 끌 수 있게 한다.
+class ShapeGuideEditBanner extends StatelessWidget {
+  const ShapeGuideEditBanner({
+    super.key,
+    required this.guide,
+    required this.metrics,
+  });
+
+  final ShapeGuideController guide;
+  final Metrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!guide.editing) return const SizedBox.shrink();
+    final m = metrics;
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Padding(
+          // 하단 촬영 바 + 날짜·장소 스탬프 미리보기 위쪽으로 띄운다.
+          padding: EdgeInsets.only(bottom: m.spc(190, 165.0, 240.0)),
+          child: Material(
+            color: Colors.amber,
+            borderRadius: BorderRadius.circular(m.sp(24)),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(m.sp(24)),
+              onTap: () => guide.setEditing(false),
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: m.sp(18),
+                  vertical: m.sp(10),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check,
+                        color: Colors.black87, size: m.spc(18, 16.0, 24.0)),
+                    SizedBox(width: m.sp(6)),
+                    Text(
+                      '도형 편집 완료',
+                      style: TextStyle(
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w700,
+                        fontSize: m.spc(13, 12.0, 18.0),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1019,7 +1079,7 @@ class _ShapeGuideSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 추가/삭제/잠금/프리셋이 즉시 반영되도록 시트를 컨트롤러에 구독시킨다.
+    // 추가/삭제/편집/프리셋이 즉시 반영되도록 시트를 컨트롤러에 구독시킨다.
     return ListenableBuilder(
       listenable: guide,
       builder: (context, _) => SafeArea(
@@ -1052,7 +1112,7 @@ class _ShapeGuideSheet extends StatelessWidget {
                 const SizedBox(height: 4),
                 const Text(
                   '화면에 원·정사각형을 놓고 피사체를 맞춰 촬영하세요. '
-                  '드래그로 이동, 두 손가락으로 크기를 조절합니다.',
+                  '평소엔 가이드로만 보이고, 편집 모드에서만 드래그·크기조절이 됩니다.',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
                 const SizedBox(height: 16),
@@ -1077,15 +1137,16 @@ class _ShapeGuideSheet extends StatelessWidget {
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  value: guide.locked,
-                  onChanged: (_) => guide.toggleLock(),
+                  value: guide.editing,
+                  onChanged: guide.isEmpty ? null : guide.setEditing,
                   activeThumbColor: Colors.amber,
                   title: const Text(
-                    '도형 위치 잠금',
+                    '도형 편집',
                     style: TextStyle(color: Colors.white),
                   ),
                   subtitle: const Text(
-                    '잠그면 촬영 중 실수로 도형을 옮기지 않습니다.',
+                    '켜면 도형을 드래그·크기조절·삭제할 수 있습니다. '
+                    '끄면 촬영 가이드로만 보입니다.',
                     style: TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                 ),

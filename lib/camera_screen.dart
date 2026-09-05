@@ -299,7 +299,12 @@ class _CameraScreenState extends State<CameraScreen> {
             onSnapshot: _snapshotToOverlay,
           ),
         ),
-        // 삭제 배지는 HUD 패널에 가리지 않도록 최상단에서 그린다.
+        // 편집 완료 버튼 + 삭제 배지는 HUD 패널에 가리지 않도록 최상단에서 그린다.
+        ListenableBuilder(
+          listenable: _shapeGuide,
+          builder: (_, _) =>
+              ShapeGuideEditBanner(guide: _shapeGuide, metrics: m),
+        ),
         ListenableBuilder(
           listenable: _shapeGuide,
           builder: (_, _) => ShapeGuideBadges(

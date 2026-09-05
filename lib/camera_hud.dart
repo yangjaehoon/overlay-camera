@@ -918,87 +918,226 @@ class _ShapeGuideSheet extends StatelessWidget {
 
   final ShapeGuideController guide;
 
+  Future<void> _saveCurrentAsPreset(BuildContext context) async {
+    final name = await _promptPresetName(context);
+    if (name == null) return;
+    guide.savePreset(name);
+  }
+
   @override
   Widget build(BuildContext context) {
-    // 추가/삭제/잠금이 즉시 반영되도록 시트 자체를 컨트롤러에 구독시킨다.
+    // 추가/삭제/잠금/프리셋이 즉시 반영되도록 시트를 컨트롤러에 구독시킨다.
     return ListenableBuilder(
       listenable: guide,
       builder: (context, _) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const Text(
-                '도형 가이드',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                '화면에 원·정사각형을 놓고 피사체를 맞춰 촬영하세요. '
-                '드래그로 이동, 두 손가락으로 크기를 조절합니다.',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: guide.addCircle,
-                      icon: const Icon(Icons.circle_outlined),
-                      label: const Text('원 추가'),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: guide.addSquare,
-                      icon: const Icon(Icons.crop_square),
-                      label: const Text('정사각형 추가'),
-                    ),
-                  ),
-                ],
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: guide.locked,
-                onChanged: (_) => guide.toggleLock(),
-                activeThumbColor: Colors.amber,
-                title: const Text(
-                  '도형 위치 잠금',
-                  style: TextStyle(color: Colors.white),
                 ),
-                subtitle: const Text(
-                  '잠그면 촬영 중 실수로 도형을 옮기지 않습니다.',
+                const Text(
+                  '도형 가이드',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  '화면에 원·정사각형을 놓고 피사체를 맞춰 촬영하세요. '
+                  '드래그로 이동, 두 손가락으로 크기를 조절합니다.',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
-              ),
-              TextButton.icon(
-                onPressed: guide.isEmpty ? null : guide.clearAll,
-                icon: const Icon(Icons.delete_sweep_outlined),
-                label: Text('모두 삭제 (${guide.shapes.length}개)'),
-                style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: guide.addCircle,
+                        icon: const Icon(Icons.circle_outlined),
+                        label: const Text('원 추가'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: guide.addSquare,
+                        icon: const Icon(Icons.crop_square),
+                        label: const Text('정사각형 추가'),
+                      ),
+                    ),
+                  ],
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: guide.locked,
+                  onChanged: (_) => guide.toggleLock(),
+                  activeThumbColor: Colors.amber,
+                  title: const Text(
+                    '도형 위치 잠금',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  subtitle: const Text(
+                    '잠그면 촬영 중 실수로 도형을 옮기지 않습니다.',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: guide.isEmpty ? null : guide.clearAll,
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  label: Text('모두 삭제 (${guide.shapes.length}개)'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.redAccent,
+                  ),
+                ),
+                const Divider(color: Colors.white12, height: 24),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '배치 저장/불러오기',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed:
+                      guide.isEmpty ? null : () => _saveCurrentAsPreset(context),
+                  icon: const Icon(Icons.bookmark_add_outlined),
+                  label: const Text('현재 배치 저장'),
+                ),
+                if (guide.presets.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 12),
+                    child: Text(
+                      '저장된 배치가 없습니다. 도형을 원하는 대로 놓고 '
+                      '"현재 배치 저장"을 누르세요.',
+                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                  )
+                else
+                  ...guide.presets.map(
+                    (preset) => _PresetTile(
+                      preset: preset,
+                      onLoad: () {
+                        guide.loadPreset(preset.id);
+                        Navigator.of(context).pop();
+                      },
+                      onDelete: () => guide.deletePreset(preset.id),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PresetTile extends StatelessWidget {
+  const _PresetTile({
+    required this.preset,
+    required this.onLoad,
+    required this.onDelete,
+  });
+
+  final ShapeGuidePreset preset;
+  final VoidCallback onLoad;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      leading: const Icon(Icons.dashboard_customize_outlined,
+          color: Colors.white70),
+      title: Text(preset.name, style: const TextStyle(color: Colors.white)),
+      subtitle: Text(
+        '도형 ${preset.shapes.length}개',
+        style: const TextStyle(color: Colors.white54, fontSize: 12),
+      ),
+      trailing: IconButton(
+        icon: const Icon(Icons.delete_outline, color: Colors.white38),
+        tooltip: '배치 삭제',
+        onPressed: onDelete,
+      ),
+      onTap: onLoad,
+    );
+  }
+}
+
+/// 배치 이름을 입력받는다. 취소하거나 빈 이름이면 null.
+Future<String?> _promptPresetName(BuildContext context) async {
+  final result = await showDialog<String>(
+    context: context,
+    builder: (_) => const _PresetNameDialog(),
+  );
+  final trimmed = result?.trim() ?? '';
+  return trimmed.isEmpty ? null : trimmed;
+}
+
+/// 이름 입력 다이얼로그. TextEditingController 수명을 위젯이 직접 관리한다
+/// (다이얼로그 종료 애니메이션 중 컨트롤러를 dispose 하면 assert 로 죽는다).
+class _PresetNameDialog extends StatefulWidget {
+  const _PresetNameDialog();
+
+  @override
+  State<_PresetNameDialog> createState() => _PresetNameDialogState();
+}
+
+class _PresetNameDialogState extends State<_PresetNameDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() => Navigator.of(context).pop(_controller.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF2C2C2E),
+      title: const Text('배치 이름', style: TextStyle(color: Colors.white)),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        style: const TextStyle(color: Colors.white),
+        decoration: const InputDecoration(
+          hintText: '예: 인물용, 상품 정면',
+          hintStyle: TextStyle(color: Colors.white38),
+        ),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('취소'),
+        ),
+        TextButton(onPressed: _submit, child: const Text('저장')),
+      ],
     );
   }
 }

@@ -95,3 +95,56 @@ List<ShapeGuide> decodeShapeGuides(String? raw) {
     return const [];
   }
 }
+
+/// 사용자가 이름을 붙여 저장한 도형 배치. 나중에 통째로 불러온다.
+class ShapeGuidePreset {
+  const ShapeGuidePreset({
+    required this.id,
+    required this.name,
+    required this.shapes,
+  });
+
+  final String id;
+  final String name;
+  final List<ShapeGuide> shapes;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'shapes': shapes.map((s) => s.toJson()).toList(),
+      };
+
+  /// 손상된 프리셋이면 null. 도형 일부가 손상됐으면 그 도형만 걸러낸다.
+  static ShapeGuidePreset? tryFromJson(Map<String, dynamic> json) {
+    final id = json['id'];
+    final name = json['name'];
+    final rawShapes = json['shapes'];
+    if (id is! String || name is! String || rawShapes is! List) return null;
+    final shapes = rawShapes
+        .whereType<Map<String, dynamic>>()
+        .map(ShapeGuide.tryFromJson)
+        .whereType<ShapeGuide>()
+        .toList();
+    return ShapeGuidePreset(id: id, name: name, shapes: shapes);
+  }
+}
+
+/// 프리셋 목록을 저장용 JSON 문자열로 직렬화한다.
+String encodeShapeGuidePresets(List<ShapeGuidePreset> presets) =>
+    jsonEncode(presets.map((p) => p.toJson()).toList());
+
+/// 저장된 JSON 문자열을 프리셋 목록으로 복원한다. 손상되었거나 없으면 빈 목록.
+List<ShapeGuidePreset> decodeShapeGuidePresets(String? raw) {
+  if (raw == null || raw.isEmpty) return const [];
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return const [];
+    return decoded
+        .whereType<Map<String, dynamic>>()
+        .map(ShapeGuidePreset.tryFromJson)
+        .whereType<ShapeGuidePreset>()
+        .toList();
+  } catch (_) {
+    return const [];
+  }
+}

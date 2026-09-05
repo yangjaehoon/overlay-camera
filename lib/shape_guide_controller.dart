@@ -12,6 +12,7 @@ class ShapeGuideController extends ChangeNotifier {
   static const _edgeMargin = 0.02;
 
   List<ShapeGuide> _shapes = const [];
+  List<ShapeGuidePreset> _presets = const [];
   bool _locked = false;
   bool _disposed = false;
 
@@ -21,6 +22,9 @@ class ShapeGuideController extends ChangeNotifier {
   List<ShapeGuide> get shapes => _shapes;
   bool get isEmpty => _shapes.isEmpty;
   bool get locked => _locked;
+
+  /// 사용자가 이름 붙여 저장한 배치들.
+  List<ShapeGuidePreset> get presets => _presets;
 
   @override
   void dispose() {
@@ -37,6 +41,7 @@ class ShapeGuideController extends ChangeNotifier {
     settings = s;
     _shapes = s.shapeGuides;
     _locked = s.shapeGuidesLocked;
+    _presets = s.shapeGuidePresets;
     _notify();
   }
 
@@ -106,4 +111,44 @@ class ShapeGuideController extends ChangeNotifier {
   void commit() => _persist();
 
   void _persist() => settings?.setShapeGuides(_shapes);
+
+  // --- 배치 저장/불러오기 -----------------------------------------------------
+
+  /// 현재 배치를 [name] 이름으로 저장한다. 빈 이름이면 무시.
+  void savePreset(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    _presets = [
+      ..._presets,
+      ShapeGuidePreset(id: id, name: trimmed, shapes: List.of(_shapes)),
+    ];
+    _persistPresets();
+    _notify();
+  }
+
+  /// 저장된 배치를 통째로 불러와 현재 도형을 교체한다. 없는 id면 무시.
+  void loadPreset(String id) {
+    ShapeGuidePreset? preset;
+    for (final p in _presets) {
+      if (p.id == id) {
+        preset = p;
+        break;
+      }
+    }
+    if (preset == null) return;
+    _shapes = List.of(preset.shapes);
+    _persist(); // 불러온 배치를 현재 작업 배치로도 저장
+    _notify();
+  }
+
+  void deletePreset(String id) {
+    final next = _presets.where((p) => p.id != id).toList();
+    if (next.length == _presets.length) return;
+    _presets = next;
+    _persistPresets();
+    _notify();
+  }
+
+  void _persistPresets() => settings?.setShapeGuidePresets(_presets);
 }

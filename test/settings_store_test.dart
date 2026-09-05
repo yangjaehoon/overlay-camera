@@ -21,6 +21,7 @@ void main() {
     expect(s.overlayOutline, false);
     expect(s.shapeGuides, isEmpty);
     expect(s.shapeGuidesLocked, false);
+    expect(s.shapeGuidePresets, isEmpty);
   });
 
   test('저장 후 다시 읽으면 값이 유지된다', () async {
@@ -43,6 +44,21 @@ void main() {
       ),
     ]);
     s.setShapeGuidesLocked(true);
+    s.setShapeGuidePresets(const [
+      ShapeGuidePreset(
+        id: 'p1',
+        name: '인물용',
+        shapes: [
+          ShapeGuide(
+            id: 's1',
+            type: ShapeGuideType.square,
+            cx: 0.5,
+            cy: 0.5,
+            size: 0.4,
+          ),
+        ],
+      ),
+    ]);
 
     final again = await SettingsStore.load();
     expect(again.silentShutter, true);
@@ -56,6 +72,9 @@ void main() {
     expect(again.shapeGuides.single.type, ShapeGuideType.circle);
     expect(again.shapeGuides.single.cx, 0.3);
     expect(again.shapeGuidesLocked, true);
+    expect(again.shapeGuidePresets.single.name, '인물용');
+    expect(again.shapeGuidePresets.single.shapes.single.type,
+        ShapeGuideType.square);
   });
 
   test('손상된 enum 인덱스는 기본값으로 폴백', () async {

@@ -27,6 +27,7 @@ class SettingsStore {
   static const _kOutline = 'overlayOutline';
   static const _kShapes = 'shapeGuides';
   static const _kShapesLocked = 'shapeGuidesLocked';
+  static const _kShapePresets = 'shapeGuidePresets';
 
   bool get silentShutter => _prefs.getBool(_kSilent) ?? false;
   void setSilentShutter(bool v) => _prefs.setBool(_kSilent, v);
@@ -76,6 +77,11 @@ class SettingsStore {
 
   bool get shapeGuidesLocked => _prefs.getBool(_kShapesLocked) ?? false;
   void setShapeGuidesLocked(bool v) => _prefs.setBool(_kShapesLocked, v);
+
+  List<ShapeGuidePreset> get shapeGuidePresets =>
+      decodeShapeGuidePresets(_prefs.getString(_kShapePresets));
+  void setShapeGuidePresets(List<ShapeGuidePreset> presets) =>
+      _prefs.setString(_kShapePresets, encodeShapeGuidePresets(presets));
 
   static T _enumByIndex<T>(List<T> values, int? index, T fallback) =>
       (index != null && index >= 0 && index < values.length)

@@ -74,6 +74,55 @@ class OverlayLayer extends StatelessWidget {
   }
 }
 
+/// 오버레이가 있을 때 화면 왼쪽 위에 항상 보이는 삭제 버튼.
+/// 상단 바 안의 같은 기능 버튼을 못 찾는 경우를 대비한 여분의 확실한 진입점.
+class OverlayQuickClear extends StatelessWidget {
+  const OverlayQuickClear({
+    super.key,
+    required this.overlay,
+    required this.metrics,
+  });
+
+  final OverlayController overlay;
+  final Metrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!overlay.hasFile) return const SizedBox.shrink();
+    final m = metrics;
+    final size = m.spc(40, 36.0, 52.0);
+    // 좌측 중앙: 상단 바·하단 바·우측 슬라이더·스탬프 패널과 겹치지 않는 빈 공간.
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: EdgeInsets.only(left: m.sp(8)),
+          child: Material(
+            color: Colors.black54,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: overlay.clear,
+              child: Tooltip(
+                message: '오버레이 삭제',
+                child: SizedBox(
+                  width: size,
+                  height: size,
+                  child: Icon(
+                    Icons.delete_outline,
+                    color: Colors.redAccent,
+                    size: m.spc(22, 20.0, 30.0),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 3분할 정렬 그리드.
 class GridOverlay extends StatelessWidget {
   const GridOverlay({super.key});
@@ -168,11 +217,11 @@ class TopBar extends StatelessWidget {
                   onTap: hasOverlay ? overlay.resetTransform : null,
                 ),
                 BarButton(
-                  icon: Icons.hide_image_outlined,
-                  color: Colors.white,
+                  icon: Icons.delete_outline,
+                  color: hasOverlay ? Colors.redAccent : Colors.white,
                   size: btn,
                   iconSize: icon,
-                  tooltip: '오버레이 제거',
+                  tooltip: '오버레이 삭제',
                   onTap: hasOverlay ? overlay.clear : null,
                 ),
                 BarButton(

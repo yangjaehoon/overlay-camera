@@ -233,6 +233,10 @@ class _CameraScreenState extends State<CameraScreen> {
         ),
         const GridOverlay(),
         ListenableBuilder(
+          listenable: _overlay,
+          builder: (_, _) => OverlayQuickClear(overlay: _overlay, metrics: m),
+        ),
+        ListenableBuilder(
           listenable: _stamp,
           builder: (_, _) => StampPreview(stamp: _stamp, metrics: m),
         ),

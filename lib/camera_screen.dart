@@ -53,7 +53,7 @@ class _CameraScreenState extends State<CameraScreen> {
     _stamp = LocationStampController(onMessage: _toast);
     _overlay = OverlayController(workDir: _workDir, onMessage: _toast);
     _grid = GridController();
-    _shapeGuide = ShapeGuideController();
+    _shapeGuide = ShapeGuideController(onMessage: _toast);
     _gallery = GalleryStore(onMessage: _toast);
     unawaited(_bootstrap());
   }
@@ -255,11 +255,7 @@ class _CameraScreenState extends State<CameraScreen> {
         ),
         ListenableBuilder(
           listenable: _shapeGuide,
-          builder: (_, _) => ShapeGuideLayer(
-            guide: _shapeGuide,
-            metrics: m,
-            onMessage: _toast,
-          ),
+          builder: (_, _) => ShapeGuideLayer(guide: _shapeGuide, metrics: m),
         ),
         ListenableBuilder(
           listenable: _overlay,
@@ -270,9 +266,9 @@ class _CameraScreenState extends State<CameraScreen> {
           builder: (_, _) => StampPreview(stamp: _stamp, metrics: m),
         ),
         ListenableBuilder(
-          listenable: Listenable.merge(
-            [_session, _stamp, _overlay, _grid, _shapeGuide],
-          ),
+          // _shapeGuide 는 도형 드래그마다 알림을 쏘므로 여기서 제외하고,
+          // TopBar 안의 도형 버튼만 자체 ListenableBuilder 로 갱신한다.
+          listenable: Listenable.merge([_session, _stamp, _overlay, _grid]),
           builder: (_, _) => TopBar(
             session: _session,
             stamp: _stamp,
@@ -301,6 +297,15 @@ class _CameraScreenState extends State<CameraScreen> {
             onTakePhoto: _takePhoto,
             onToggleRecording: _toggleRecording,
             onSnapshot: _snapshotToOverlay,
+          ),
+        ),
+        // 삭제 배지는 HUD 패널에 가리지 않도록 최상단에서 그린다.
+        ListenableBuilder(
+          listenable: _shapeGuide,
+          builder: (_, _) => ShapeGuideBadges(
+            guide: _shapeGuide,
+            metrics: m,
+            onMessage: _toast,
           ),
         ),
       ],

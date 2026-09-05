@@ -150,22 +150,28 @@ class GridOverlay extends StatelessWidget {
   }
 }
 
-/// 사용자가 배치한 원/정사각형 가이드 도형들. 위치·크기는 화면 비율로 저장된다.
+/// 화면 짧은 변 기준 도형 지름(px). 위젯 여러 곳에서 같은 공식을 쓰도록 분리.
+double shapeGuideDiameter(ShapeGuide s, Size screen) =>
+    (s.size * screen.shortestSide).clamp(24.0, screen.shortestSide * 2).toDouble();
+
+/// 사용자가 배치한 원/정사각형 가이드 도형들(선만). 삭제 배지는 [ShapeGuideBadges]가
+/// HUD 위 최상단 레이어에서 따로 그린다(패널에 가려 못 누르는 일이 없도록).
 class ShapeGuideLayer extends StatelessWidget {
   const ShapeGuideLayer({
     super.key,
     required this.guide,
     required this.metrics,
-    this.onMessage,
   });
 
   final ShapeGuideController guide;
   final Metrics metrics;
-  final void Function(String message)? onMessage;
 
   @override
   Widget build(BuildContext context) {
-    if (guide.isEmpty) return const SizedBox.shrink();
+    if (guide.isEmpty || metrics.size.shortestSide <= 0) {
+      return const SizedBox.shrink();
+    }
+    final strokeWidth = metrics.sp(2.5).clamp(2.0, 4.0).toDouble();
     return Stack(
       children: [
         for (final shape in guide.shapes)
@@ -174,7 +180,7 @@ class ShapeGuideLayer extends StatelessWidget {
             shape: shape,
             guide: guide,
             screenSize: metrics.size,
-            onMessage: onMessage,
+            strokeWidth: strokeWidth,
           ),
       ],
     );
@@ -187,13 +193,13 @@ class _ShapeGuideItem extends StatefulWidget {
     required this.shape,
     required this.guide,
     required this.screenSize,
-    this.onMessage,
+    required this.strokeWidth,
   });
 
   final ShapeGuide shape;
   final ShapeGuideController guide;
   final Size screenSize;
-  final void Function(String message)? onMessage;
+  final double strokeWidth;
 
   @override
   State<_ShapeGuideItem> createState() => _ShapeGuideItemState();
@@ -207,107 +213,183 @@ class _ShapeGuideItemState extends State<_ShapeGuideItem> {
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
-    widget.guide.move(widget.shape.id, details.focalPointDelta, widget.screenSize);
-    widget.guide.resize(widget.shape.id, _baseSize * details.scale);
+    // 이동·크기를 한 번에 반영(알림 1회). 크기는 두 손가락일 때만 바꾼다.
+    widget.guide.dragUpdate(
+      widget.shape.id,
+      pixelDelta: details.focalPointDelta,
+      screenSize: widget.screenSize,
+      size: details.pointerCount >= 2 ? _baseSize * details.scale : null,
+    );
   }
 
   void _onScaleEnd(ScaleEndDetails details) => widget.guide.commit();
-
-  void _delete() {
-    widget.guide.remove(widget.shape.id);
-    widget.onMessage?.call('도형을 삭제했습니다.');
-  }
 
   @override
   Widget build(BuildContext context) {
     final s = widget.shape;
     final screen = widget.screenSize;
-    final shortSide = screen.shortestSide;
-    final diameter = (s.size * shortSide).clamp(24.0, shortSide * 2);
+    final diameter = shapeGuideDiameter(s, screen);
     final left = s.cx * screen.width - diameter / 2;
     final top = s.cy * screen.height - diameter / 2;
     final locked = widget.guide.locked;
 
     final shapeVisual = CustomPaint(
       size: Size(diameter, diameter),
-      painter: _ShapeGuidePainter(type: s.type),
+      painter: _ShapeGuidePainter(
+        type: s.type,
+        strokeWidth: widget.strokeWidth,
+      ),
     );
 
     // opaque: 도형 영역을 터치하면 이 제스처가 가로채고, 아래(오버레이 등)로는
     // 전달하지 않는다 — 같은 지점에서 두 GestureDetector가 동시에 반응하는
     // 충돌(제스처 아레나)을 막는다. 도형이 없는 빈 영역은 자연히 아래로 통과된다.
-    final body = locked
-        ? IgnorePointer(child: shapeVisual)
-        : GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onScaleStart: _onScaleStart,
-            onScaleUpdate: _onScaleUpdate,
-            onScaleEnd: _onScaleEnd,
-            child: shapeVisual,
-          );
-
     return Positioned(
       left: left,
       top: top,
       width: diameter,
       height: diameter,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          body,
-          if (!locked)
-            Positioned(
-              right: -8,
-              top: -8,
-              child: _DeleteBadge(onTap: _delete),
+      child: locked
+          ? IgnorePointer(child: shapeVisual)
+          : GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onScaleStart: _onScaleStart,
+              onScaleUpdate: _onScaleUpdate,
+              onScaleEnd: _onScaleEnd,
+              child: shapeVisual,
             ),
-        ],
+    );
+  }
+}
+
+/// 도형별 삭제 배지. HUD 패널 위에 그려서 도형을 화면 구석으로 밀어도 항상 누를 수 있다.
+/// 잠금 상태이거나 도형이 없으면 아무것도 그리지 않는다.
+class ShapeGuideBadges extends StatelessWidget {
+  const ShapeGuideBadges({
+    super.key,
+    required this.guide,
+    required this.metrics,
+    this.onMessage,
+  });
+
+  final ShapeGuideController guide;
+  final Metrics metrics;
+  final void Function(String message)? onMessage;
+
+  static const _badge = 44.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final screen = metrics.size;
+    if (guide.isEmpty || guide.locked || screen.shortestSide <= 0) {
+      return const SizedBox.shrink();
+    }
+    final pad = MediaQuery.paddingOf(context);
+    // 배지가 상태바/제스처바 안쪽에 오도록 안전 영역만큼 뺀다.
+    final minX = pad.left + 4;
+    final maxX = screen.width - pad.right - 4 - _badge;
+    final minY = pad.top + 4;
+    final maxY = screen.height - pad.bottom - 4 - _badge;
+
+    return Stack(
+      children: [
+        for (final shape in guide.shapes)
+          _positionedBadge(shape, screen, minX, maxX, minY, maxY),
+      ],
+    );
+  }
+
+  Widget _positionedBadge(
+    ShapeGuide shape,
+    Size screen,
+    double minX,
+    double maxX,
+    double minY,
+    double maxY,
+  ) {
+    final d = shapeGuideDiameter(shape, screen);
+    // 도형 오른쪽 위 모서리에 배지 중심을 두고, 화면(안전 영역) 안으로 클램프.
+    final x = shape.cx * screen.width + d / 2 - _badge / 2;
+    final y = shape.cy * screen.height - d / 2 - _badge / 2;
+    return Positioned(
+      key: ValueKey(shape.id),
+      left: x.clamp(minX, maxX < minX ? minX : maxX),
+      top: y.clamp(minY, maxY < minY ? minY : maxY),
+      child: _DeleteBadge(
+        size: _badge,
+        onTap: () {
+          guide.remove(shape.id);
+          onMessage?.call('도형을 삭제했습니다.');
+        },
       ),
     );
   }
 }
 
 class _ShapeGuidePainter extends CustomPainter {
-  const _ShapeGuidePainter({required this.type});
+  const _ShapeGuidePainter({required this.type, required this.strokeWidth});
 
   final ShapeGuideType type;
+  final double strokeWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
+    final rect = Offset.zero & size;
+    // 밝은 배경에서도 보이도록 어두운 헤일로를 먼저 깔고 흰 선을 얹는다.
+    final halo = Paint()
+      ..color = Colors.black.withValues(alpha: 0.55)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth + 2;
+    final line = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
-    final rect = Offset.zero & size;
+      ..strokeWidth = strokeWidth;
     if (type == ShapeGuideType.circle) {
-      canvas.drawOval(rect, paint);
+      canvas.drawOval(rect, halo);
+      canvas.drawOval(rect, line);
     } else {
-      canvas.drawRect(rect, paint);
+      canvas.drawRect(rect, halo);
+      canvas.drawRect(rect, line);
     }
   }
 
   @override
   bool shouldRepaint(covariant _ShapeGuidePainter oldDelegate) =>
-      oldDelegate.type != type;
+      oldDelegate.type != type || oldDelegate.strokeWidth != strokeWidth;
 }
 
-/// 도형 모서리에 뜨는 삭제 배지. 항상 눈에 보여야 발견하기 쉽다.
+/// 도형 모서리에 뜨는 삭제 배지. 눈에 잘 띄고 최소 터치 타깃(44)을 확보한다.
 class _DeleteBadge extends StatelessWidget {
-  const _DeleteBadge({required this.onTap});
+  const _DeleteBadge({required this.size, required this.onTap});
 
+  final double size;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.black54,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: const Padding(
-          padding: EdgeInsets.all(4),
-          child: Icon(Icons.close, color: Colors.redAccent, size: 16),
+    return Tooltip(
+      message: '도형 삭제',
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkResponse(
+            onTap: onTap,
+            radius: size * 0.5,
+            child: Center(
+              child: Container(
+                width: 26,
+                height: 26,
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child:
+                    const Icon(Icons.close, color: Colors.redAccent, size: 18),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -397,13 +479,18 @@ class TopBar extends StatelessWidget {
                   tooltip: '그리드 설정',
                   onTap: onOpenGridSettings,
                 ),
-                BarButton(
-                  icon: Icons.category_outlined,
-                  color: shapeGuide.isEmpty ? Colors.white : Colors.amber,
-                  size: btn,
-                  iconSize: icon,
-                  tooltip: '도형 가이드',
-                  onTap: onOpenShapeGuideSettings,
+                // 도형 드래그마다 shapeGuide 가 알림을 쏘므로, 상단 바 전체가 아니라
+                // 이 버튼만 다시 빌드되도록 별도 ListenableBuilder 로 감싼다.
+                ListenableBuilder(
+                  listenable: shapeGuide,
+                  builder: (_, _) => BarButton(
+                    icon: Icons.category_outlined,
+                    color: shapeGuide.isEmpty ? Colors.white : Colors.amber,
+                    size: btn,
+                    iconSize: icon,
+                    tooltip: '도형 가이드',
+                    onTap: onOpenShapeGuideSettings,
+                  ),
                 ),
                 BarButton(
                   icon: overlay.locked ? Icons.lock : Icons.lock_open,
@@ -905,6 +992,12 @@ Future<void> showShapeGuideSheet(
 ) {
   return showModalBottomSheet<void>(
     context: context,
+    // 프리셋 목록까지 들어가면 길어지므로, 필요 시 화면의 최대 85%까지 늘리고
+    // 그 안에서 스크롤되게 한다(작은 폰에서 잘리지 않도록).
+    isScrollControlled: true,
+    constraints: BoxConstraints(
+      maxHeight: MediaQuery.of(context).size.height * 0.85,
+    ),
     backgroundColor: const Color(0xFF1C1C1E),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1037,8 +1130,9 @@ class _ShapeGuideSheet extends StatelessWidget {
                     (preset) => _PresetTile(
                       preset: preset,
                       onLoad: () {
-                        guide.loadPreset(preset.id);
+                        // 시트를 먼저 닫고 나서 불러온다(닫히는 서브트리 리빌드 방지).
                         Navigator.of(context).pop();
+                        guide.loadPreset(preset.id);
                       },
                       onDelete: () => guide.deletePreset(preset.id),
                     ),

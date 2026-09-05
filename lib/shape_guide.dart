@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 /// 화면에 배치하는 정합용 가이드 도형의 모양.
 enum ShapeGuideType { circle, square }
 
@@ -91,7 +93,8 @@ List<ShapeGuide> decodeShapeGuides(String? raw) {
         .map(ShapeGuide.tryFromJson)
         .whereType<ShapeGuide>()
         .toList();
-  } catch (_) {
+  } catch (e) {
+    debugPrint('도형 데이터 복원 실패: $e');
     return const [];
   }
 }
@@ -144,7 +147,8 @@ List<ShapeGuidePreset> decodeShapeGuidePresets(String? raw) {
         .map(ShapeGuidePreset.tryFromJson)
         .whereType<ShapeGuidePreset>()
         .toList();
-  } catch (_) {
+  } catch (e) {
+    debugPrint('도형 배치(프리셋) 복원 실패: $e');
     return const [];
   }
 }

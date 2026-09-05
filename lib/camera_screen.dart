@@ -299,12 +299,8 @@ class _CameraScreenState extends State<CameraScreen> {
             onSnapshot: _snapshotToOverlay,
           ),
         ),
-        // 편집 완료 버튼 + 삭제 배지는 HUD 패널에 가리지 않도록 최상단에서 그린다.
-        ListenableBuilder(
-          listenable: _shapeGuide,
-          builder: (_, _) =>
-              ShapeGuideEditBanner(guide: _shapeGuide, metrics: m),
-        ),
+        // 삭제 배지 + 편집 완료 버튼은 HUD 패널에 가리지 않도록 최상단에서 그린다.
+        // 배지는 도형 드래그마다 갱신돼야 하므로 전체 알림(_shapeGuide)에 구독.
         ListenableBuilder(
           listenable: _shapeGuide,
           builder: (_, _) => ShapeGuideBadges(
@@ -312,6 +308,13 @@ class _CameraScreenState extends State<CameraScreen> {
             metrics: m,
             onMessage: _toast,
           ),
+        ),
+        // 편집 완료 버튼은 편집 상태에만 의존 → 구조 채널만 구독(드래그 중 리빌드 X).
+        // 배지보다 위에 둬서, 도형을 이 버튼 위로 끌어도 버튼을 계속 누를 수 있게 한다.
+        ListenableBuilder(
+          listenable: _shapeGuide.structure,
+          builder: (_, _) =>
+              ShapeGuideEditBanner(guide: _shapeGuide, metrics: m),
         ),
       ],
     );

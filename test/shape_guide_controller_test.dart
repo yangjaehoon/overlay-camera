@@ -154,6 +154,42 @@ void main() {
       c.dispose();
     });
 
+    test('배지로 마지막 도형을 지우면 편집 모드가 꺼진다', () {
+      final c = ShapeGuideController();
+      c.addCircle();
+      c.addSquare();
+      expect(c.editing, true);
+
+      c.remove(c.shapes.first.id);
+      expect(c.editing, true); // 아직 한 개 남음
+
+      c.remove(c.shapes.first.id);
+      expect(c.isEmpty, true);
+      expect(c.editing, false); // 마지막을 지우면 편집 모드 종료
+      c.dispose();
+    });
+
+    test('구조 채널은 구조 변경에만 알리고 드래그에는 반응하지 않는다', () {
+      final c = ShapeGuideController();
+      var structural = 0;
+      c.structure.addListener(() => structural++);
+
+      c.addCircle(); // 구조 변경
+      expect(structural, 1);
+
+      final id = c.shapes.single.id;
+      c.dragUpdate(id,
+          pixelDelta: const Offset(10, 10), screenSize: const Size(400, 800));
+      c.dragUpdate(id,
+          pixelDelta: const Offset(10, 10), screenSize: const Size(400, 800));
+      expect(structural, 1); // 드래그로는 안 늘어남
+
+      c.setEditing(false); // 구조 변경
+      expect(structural, 2);
+
+      c.dispose();
+    });
+
     test('편집 모드는 저장되지 않는다(hydrate 후 항상 꺼짐)', () async {
       SharedPreferences.setMockInitialValues({});
       final s = await SettingsStore.load();

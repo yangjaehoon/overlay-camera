@@ -539,10 +539,10 @@ class TopBar extends StatelessWidget {
                   tooltip: '그리드 설정',
                   onTap: onOpenGridSettings,
                 ),
-                // 도형 드래그마다 shapeGuide 가 알림을 쏘므로, 상단 바 전체가 아니라
-                // 이 버튼만 다시 빌드되도록 별도 ListenableBuilder 로 감싼다.
+                // 색만 isEmpty 에 의존하므로 구조 변경 채널만 구독한다
+                // (도형 드래그 중 잦은 리빌드 방지).
                 ListenableBuilder(
-                  listenable: shapeGuide,
+                  listenable: shapeGuide.structure,
                   builder: (_, _) => BarButton(
                     icon: Icons.category_outlined,
                     color: shapeGuide.isEmpty ? Colors.white : Colors.amber,
@@ -1135,29 +1135,33 @@ class _ShapeGuideSheet extends StatelessWidget {
                     ),
                   ],
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: guide.editing,
-                  onChanged: guide.isEmpty ? null : guide.setEditing,
-                  activeThumbColor: Colors.amber,
-                  title: const Text(
-                    '도형 편집',
-                    style: TextStyle(color: Colors.white),
+                // 도형이 있어야 켜고 끌 게 있으므로 그때만 노출한다.
+                // (도형 추가 시 편집 모드는 자동으로 켜진다.)
+                if (!guide.isEmpty)
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: guide.editing,
+                    onChanged: guide.setEditing,
+                    activeThumbColor: Colors.amber,
+                    title: const Text(
+                      '도형 편집',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    subtitle: const Text(
+                      '켜면 도형을 드래그·크기조절·삭제할 수 있습니다. '
+                      '끄면 촬영 가이드로만 보입니다.',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
                   ),
-                  subtitle: const Text(
-                    '켜면 도형을 드래그·크기조절·삭제할 수 있습니다. '
-                    '끄면 촬영 가이드로만 보입니다.',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                if (!guide.isEmpty)
+                  TextButton.icon(
+                    onPressed: guide.clearAll,
+                    icon: const Icon(Icons.delete_sweep_outlined),
+                    label: Text('모두 삭제 (${guide.shapes.length}개)'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                    ),
                   ),
-                ),
-                TextButton.icon(
-                  onPressed: guide.isEmpty ? null : guide.clearAll,
-                  icon: const Icon(Icons.delete_sweep_outlined),
-                  label: Text('모두 삭제 (${guide.shapes.length}개)'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.redAccent,
-                  ),
-                ),
                 const Divider(color: Colors.white12, height: 24),
                 const Align(
                   alignment: Alignment.centerLeft,

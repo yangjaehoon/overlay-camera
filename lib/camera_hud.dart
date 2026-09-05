@@ -1,4 +1,5 @@
 import 'package:camera/camera.dart';
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/material.dart';
 
 import 'camera_session.dart';
@@ -264,7 +265,8 @@ class _ShapeGuideItemState extends State<_ShapeGuideItem> {
   }
 }
 
-/// 도형별 삭제 배지. HUD 패널 위에 그려서 도형을 화면 구석으로 밀어도 항상 누를 수 있다.
+/// 도형별 조작 컨트롤(오른쪽 위 = 삭제 배지, 오른쪽 아래 = 크기 조절 핸들).
+/// HUD 패널 위에 그려서 도형을 화면 구석으로 밀어도 항상 조작할 수 있다.
 /// 편집 모드가 아니거나 도형이 없으면 아무것도 그리지 않는다.
 class ShapeGuideBadges extends StatelessWidget {
   const ShapeGuideBadges({
@@ -287,42 +289,137 @@ class ShapeGuideBadges extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final pad = MediaQuery.paddingOf(context);
-    // 배지가 상태바/제스처바 안쪽에 오도록 안전 영역만큼 뺀다.
+    // 컨트롤이 상태바/제스처바 안쪽에 오도록 안전 영역만큼 뺀다.
     final minX = pad.left + 4;
     final maxX = screen.width - pad.right - 4 - _badge;
     final minY = pad.top + 4;
     final maxY = screen.height - pad.bottom - 4 - _badge;
+    double clampX(double v) => v.clamp(minX, maxX < minX ? minX : maxX);
+    double clampY(double v) => v.clamp(minY, maxY < minY ? minY : maxY);
 
     return Stack(
       children: [
-        for (final shape in guide.shapes)
-          _positionedBadge(shape, screen, minX, maxX, minY, maxY),
+        for (final shape in guide.shapes) ...[
+          _positioned(
+            key: ValueKey('${shape.id}_del'),
+            // 오른쪽 위 모서리
+            x: clampX(shape.cx * screen.width +
+                shapeGuideDiameter(shape, screen) / 2 -
+                _badge / 2),
+            y: clampY(shape.cy * screen.height -
+                shapeGuideDiameter(shape, screen) / 2 -
+                _badge / 2),
+            child: _DeleteBadge(
+              size: _badge,
+              onTap: () {
+                guide.remove(shape.id);
+                onMessage?.call('도형을 삭제했습니다.');
+              },
+            ),
+          ),
+          _positioned(
+            key: ValueKey('${shape.id}_size'),
+            // 오른쪽 아래 모서리
+            x: clampX(shape.cx * screen.width +
+                shapeGuideDiameter(shape, screen) / 2 -
+                _badge / 2),
+            y: clampY(shape.cy * screen.height +
+                shapeGuideDiameter(shape, screen) / 2 -
+                _badge / 2),
+            child: _ResizeHandle(
+              key: ValueKey('${shape.id}_size_h'),
+              size: _badge,
+              shape: shape,
+              guide: guide,
+              screenSize: screen,
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  Widget _positionedBadge(
-    ShapeGuide shape,
-    Size screen,
-    double minX,
-    double maxX,
-    double minY,
-    double maxY,
-  ) {
-    final d = shapeGuideDiameter(shape, screen);
-    // 도형 오른쪽 위 모서리에 배지 중심을 두고, 화면(안전 영역) 안으로 클램프.
-    final x = shape.cx * screen.width + d / 2 - _badge / 2;
-    final y = shape.cy * screen.height - d / 2 - _badge / 2;
-    return Positioned(
-      key: ValueKey(shape.id),
-      left: x.clamp(minX, maxX < minX ? minX : maxX),
-      top: y.clamp(minY, maxY < minY ? minY : maxY),
-      child: _DeleteBadge(
-        size: _badge,
-        onTap: () {
-          guide.remove(shape.id);
-          onMessage?.call('도형을 삭제했습니다.');
-        },
+  Widget _positioned({
+    required Key key,
+    required double x,
+    required double y,
+    required Widget child,
+  }) =>
+      Positioned(key: key, left: x, top: y, child: child);
+}
+
+/// 도형 오른쪽 아래 모서리의 크기 조절 핸들. 중심에서 멀어질수록 커진다.
+class _ResizeHandle extends StatefulWidget {
+  const _ResizeHandle({
+    super.key,
+    required this.size,
+    required this.shape,
+    required this.guide,
+    required this.screenSize,
+  });
+
+  final double size;
+  final ShapeGuide shape;
+  final ShapeGuideController guide;
+  final Size screenSize;
+
+  @override
+  State<_ResizeHandle> createState() => _ResizeHandleState();
+}
+
+class _ResizeHandleState extends State<_ResizeHandle> {
+  double _baseDiameter = 0;
+  double _accum = 0;
+
+  void _onPanStart(DragStartDetails _) {
+    _baseDiameter = shapeGuideDiameter(widget.shape, widget.screenSize);
+    _accum = 0;
+  }
+
+  void _onPanUpdate(DragUpdateDetails d) {
+    // 핸들을 오른쪽·아래로 끌면 지름이 그만큼 커진다(양 축 이동량의 합).
+    _accum += d.delta.dx + d.delta.dy;
+    final newDiameter = _baseDiameter + _accum;
+    widget.guide.dragUpdate(
+      widget.shape.id,
+      pixelDelta: Offset.zero,
+      screenSize: widget.screenSize,
+      size: newDiameter / widget.screenSize.shortestSide,
+    );
+  }
+
+  void _onPanEnd(DragEndDetails _) => widget.guide.commit();
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: '크기 조절',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        // 손을 대자마자 크기가 반응하도록(초기 데드존 제거).
+        dragStartBehavior: DragStartBehavior.down,
+        onPanStart: _onPanStart,
+        onPanUpdate: _onPanUpdate,
+        onPanEnd: _onPanEnd,
+        child: SizedBox(
+          width: widget.size,
+          height: widget.size,
+          child: Center(
+            child: Container(
+              width: 26,
+              height: 26,
+              decoration: const BoxDecoration(
+                color: Colors.black54,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.open_in_full,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1111,8 +1208,9 @@ class _ShapeGuideSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  '화면에 원·정사각형을 놓고 피사체를 맞춰 촬영하세요. '
-                  '평소엔 가이드로만 보이고, 편집 모드에서만 드래그·크기조절이 됩니다.',
+                  '화면에 원·정사각형을 놓고 피사체를 맞춰 촬영하세요. 평소엔 '
+                  '가이드로만 보이고, 편집 모드에서 도형을 끌어 옮기거나 오른쪽 아래 '
+                  '핸들로 크기를 조절합니다.',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
                 const SizedBox(height: 16),

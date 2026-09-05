@@ -15,6 +15,7 @@ import 'grid_controller.dart';
 import 'location_stamp_controller.dart';
 import 'overlay_controller.dart';
 import 'settings_store.dart';
+import 'shape_guide_controller.dart';
 import 'ui_metrics.dart';
 import 'work_dir.dart';
 
@@ -40,6 +41,7 @@ class _CameraScreenState extends State<CameraScreen> {
   late final LocationStampController _stamp;
   late final OverlayController _overlay;
   late final GridController _grid;
+  late final ShapeGuideController _shapeGuide;
   late final GalleryStore _gallery;
 
   bool _settingsLoaded = false;
@@ -51,6 +53,7 @@ class _CameraScreenState extends State<CameraScreen> {
     _stamp = LocationStampController(onMessage: _toast);
     _overlay = OverlayController(workDir: _workDir, onMessage: _toast);
     _grid = GridController();
+    _shapeGuide = ShapeGuideController();
     _gallery = GalleryStore(onMessage: _toast);
     unawaited(_bootstrap());
   }
@@ -61,6 +64,7 @@ class _CameraScreenState extends State<CameraScreen> {
     _stamp.dispose();
     _overlay.dispose();
     _grid.dispose();
+    _shapeGuide.dispose();
     super.dispose();
   }
 
@@ -75,6 +79,7 @@ class _CameraScreenState extends State<CameraScreen> {
         _stamp.hydrate(s);
         _overlay.hydrate(s);
         _grid.hydrate(s);
+        _shapeGuide.hydrate(s);
       } on Exception catch (e) {
         debugPrint('설정 로드 실패: $e');
       }
@@ -182,6 +187,10 @@ class _CameraScreenState extends State<CameraScreen> {
     unawaited(showGridSettingsSheet(context, _grid));
   }
 
+  void _openShapeGuideSettings() {
+    unawaited(showShapeGuideSheet(context, _shapeGuide));
+  }
+
   void _toast(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -245,6 +254,14 @@ class _CameraScreenState extends State<CameraScreen> {
           builder: (_, _) => GridOverlay(type: _grid.type),
         ),
         ListenableBuilder(
+          listenable: _shapeGuide,
+          builder: (_, _) => ShapeGuideLayer(
+            guide: _shapeGuide,
+            metrics: m,
+            onMessage: _toast,
+          ),
+        ),
+        ListenableBuilder(
           listenable: _overlay,
           builder: (_, _) => OverlayQuickClear(overlay: _overlay, metrics: m),
         ),
@@ -253,13 +270,17 @@ class _CameraScreenState extends State<CameraScreen> {
           builder: (_, _) => StampPreview(stamp: _stamp, metrics: m),
         ),
         ListenableBuilder(
-          listenable: Listenable.merge([_session, _stamp, _overlay, _grid]),
+          listenable: Listenable.merge(
+            [_session, _stamp, _overlay, _grid, _shapeGuide],
+          ),
           builder: (_, _) => TopBar(
             session: _session,
             stamp: _stamp,
             overlay: _overlay,
             grid: _grid,
+            shapeGuide: _shapeGuide,
             onOpenGridSettings: _openGridSettings,
+            onOpenShapeGuideSettings: _openShapeGuideSettings,
             metrics: m,
           ),
         ),

@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'grid_controller.dart';
 import 'photo_stamp.dart';
+import 'shape_guide.dart';
 
 /// 사용자 설정을 SharedPreferences에 영속화한다.
 /// getter는 저장값(없으면 기본값)을 즉시 돌려주고, set* 은 즉시 인메모리 캐시를
@@ -24,6 +25,8 @@ class SettingsStore {
   static const _kLens = 'lensDirection';
   static const _kGrid = 'gridType';
   static const _kOutline = 'overlayOutline';
+  static const _kShapes = 'shapeGuides';
+  static const _kShapesLocked = 'shapeGuidesLocked';
 
   bool get silentShutter => _prefs.getBool(_kSilent) ?? false;
   void setSilentShutter(bool v) => _prefs.setBool(_kSilent, v);
@@ -65,6 +68,14 @@ class SettingsStore {
 
   bool get overlayOutline => _prefs.getBool(_kOutline) ?? false;
   void setOverlayOutline(bool v) => _prefs.setBool(_kOutline, v);
+
+  List<ShapeGuide> get shapeGuides =>
+      decodeShapeGuides(_prefs.getString(_kShapes));
+  void setShapeGuides(List<ShapeGuide> shapes) =>
+      _prefs.setString(_kShapes, encodeShapeGuides(shapes));
+
+  bool get shapeGuidesLocked => _prefs.getBool(_kShapesLocked) ?? false;
+  void setShapeGuidesLocked(bool v) => _prefs.setBool(_kShapesLocked, v);
 
   static T _enumByIndex<T>(List<T> values, int? index, T fallback) =>
       (index != null && index >= 0 && index < values.length)

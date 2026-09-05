@@ -7,6 +7,8 @@ import 'grid_controller.dart';
 import 'location_stamp_controller.dart';
 import 'overlay_controller.dart';
 import 'photo_stamp.dart';
+import 'shape_guide.dart';
+import 'shape_guide_controller.dart';
 import 'ui_metrics.dart';
 
 IconData flashIcon(FlashMode mode) {
@@ -148,6 +150,170 @@ class GridOverlay extends StatelessWidget {
   }
 }
 
+/// 사용자가 배치한 원/정사각형 가이드 도형들. 위치·크기는 화면 비율로 저장된다.
+class ShapeGuideLayer extends StatelessWidget {
+  const ShapeGuideLayer({
+    super.key,
+    required this.guide,
+    required this.metrics,
+    this.onMessage,
+  });
+
+  final ShapeGuideController guide;
+  final Metrics metrics;
+  final void Function(String message)? onMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    if (guide.isEmpty) return const SizedBox.shrink();
+    return Stack(
+      children: [
+        for (final shape in guide.shapes)
+          _ShapeGuideItem(
+            key: ValueKey(shape.id),
+            shape: shape,
+            guide: guide,
+            screenSize: metrics.size,
+            onMessage: onMessage,
+          ),
+      ],
+    );
+  }
+}
+
+class _ShapeGuideItem extends StatefulWidget {
+  const _ShapeGuideItem({
+    super.key,
+    required this.shape,
+    required this.guide,
+    required this.screenSize,
+    this.onMessage,
+  });
+
+  final ShapeGuide shape;
+  final ShapeGuideController guide;
+  final Size screenSize;
+  final void Function(String message)? onMessage;
+
+  @override
+  State<_ShapeGuideItem> createState() => _ShapeGuideItemState();
+}
+
+class _ShapeGuideItemState extends State<_ShapeGuideItem> {
+  double _baseSize = 0;
+
+  void _onScaleStart(ScaleStartDetails details) {
+    _baseSize = widget.shape.size;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails details) {
+    widget.guide.move(widget.shape.id, details.focalPointDelta, widget.screenSize);
+    widget.guide.resize(widget.shape.id, _baseSize * details.scale);
+  }
+
+  void _onScaleEnd(ScaleEndDetails details) => widget.guide.commit();
+
+  void _delete() {
+    widget.guide.remove(widget.shape.id);
+    widget.onMessage?.call('도형을 삭제했습니다.');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.shape;
+    final screen = widget.screenSize;
+    final shortSide = screen.shortestSide;
+    final diameter = (s.size * shortSide).clamp(24.0, shortSide * 2);
+    final left = s.cx * screen.width - diameter / 2;
+    final top = s.cy * screen.height - diameter / 2;
+    final locked = widget.guide.locked;
+
+    final shapeVisual = CustomPaint(
+      size: Size(diameter, diameter),
+      painter: _ShapeGuidePainter(type: s.type),
+    );
+
+    // opaque: 도형 영역을 터치하면 이 제스처가 가로채고, 아래(오버레이 등)로는
+    // 전달하지 않는다 — 같은 지점에서 두 GestureDetector가 동시에 반응하는
+    // 충돌(제스처 아레나)을 막는다. 도형이 없는 빈 영역은 자연히 아래로 통과된다.
+    final body = locked
+        ? IgnorePointer(child: shapeVisual)
+        : GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onScaleStart: _onScaleStart,
+            onScaleUpdate: _onScaleUpdate,
+            onScaleEnd: _onScaleEnd,
+            child: shapeVisual,
+          );
+
+    return Positioned(
+      left: left,
+      top: top,
+      width: diameter,
+      height: diameter,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          body,
+          if (!locked)
+            Positioned(
+              right: -8,
+              top: -8,
+              child: _DeleteBadge(onTap: _delete),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShapeGuidePainter extends CustomPainter {
+  const _ShapeGuidePainter({required this.type});
+
+  final ShapeGuideType type;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+    final rect = Offset.zero & size;
+    if (type == ShapeGuideType.circle) {
+      canvas.drawOval(rect, paint);
+    } else {
+      canvas.drawRect(rect, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ShapeGuidePainter oldDelegate) =>
+      oldDelegate.type != type;
+}
+
+/// 도형 모서리에 뜨는 삭제 배지. 항상 눈에 보여야 발견하기 쉽다.
+class _DeleteBadge extends StatelessWidget {
+  const _DeleteBadge({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black54,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: const Padding(
+          padding: EdgeInsets.all(4),
+          child: Icon(Icons.close, color: Colors.redAccent, size: 16),
+        ),
+      ),
+    );
+  }
+}
+
 /// 상단 컨트롤 바 (무음·스탬프·플래시·오버레이 조작·자동사용).
 class TopBar extends StatelessWidget {
   const TopBar({
@@ -156,16 +322,20 @@ class TopBar extends StatelessWidget {
     required this.stamp,
     required this.overlay,
     required this.grid,
+    required this.shapeGuide,
     required this.metrics,
     required this.onOpenGridSettings,
+    required this.onOpenShapeGuideSettings,
   });
 
   final CameraSession session;
   final LocationStampController stamp;
   final OverlayController overlay;
   final GridController grid;
+  final ShapeGuideController shapeGuide;
   final Metrics metrics;
   final VoidCallback onOpenGridSettings;
+  final VoidCallback onOpenShapeGuideSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -226,6 +396,14 @@ class TopBar extends StatelessWidget {
                   iconSize: icon,
                   tooltip: '그리드 설정',
                   onTap: onOpenGridSettings,
+                ),
+                BarButton(
+                  icon: Icons.category_outlined,
+                  color: shapeGuide.isEmpty ? Colors.white : Colors.amber,
+                  size: btn,
+                  iconSize: icon,
+                  tooltip: '도형 가이드',
+                  onTap: onOpenShapeGuideSettings,
                 ),
                 BarButton(
                   icon: overlay.locked ? Icons.lock : Icons.lock_open,
@@ -716,6 +894,111 @@ class _GridOptionTile extends StatelessWidget {
           ? const Icon(Icons.check, color: Colors.amber)
           : null,
       onTap: onTap,
+    );
+  }
+}
+
+/// 도형 가이드 설정 바텀시트를 띄운다.
+Future<void> showShapeGuideSheet(
+  BuildContext context,
+  ShapeGuideController guide,
+) {
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: const Color(0xFF1C1C1E),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (sheetContext) => _ShapeGuideSheet(guide: guide),
+  );
+}
+
+class _ShapeGuideSheet extends StatelessWidget {
+  const _ShapeGuideSheet({required this.guide});
+
+  final ShapeGuideController guide;
+
+  @override
+  Widget build(BuildContext context) {
+    // 추가/삭제/잠금이 즉시 반영되도록 시트 자체를 컨트롤러에 구독시킨다.
+    return ListenableBuilder(
+      listenable: guide,
+      builder: (context, _) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                '도형 가이드',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                '화면에 원·정사각형을 놓고 피사체를 맞춰 촬영하세요. '
+                '드래그로 이동, 두 손가락으로 크기를 조절합니다.',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: guide.addCircle,
+                      icon: const Icon(Icons.circle_outlined),
+                      label: const Text('원 추가'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: guide.addSquare,
+                      icon: const Icon(Icons.crop_square),
+                      label: const Text('정사각형 추가'),
+                    ),
+                  ),
+                ],
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: guide.locked,
+                onChanged: (_) => guide.toggleLock(),
+                activeThumbColor: Colors.amber,
+                title: const Text(
+                  '도형 위치 잠금',
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: const Text(
+                  '잠그면 촬영 중 실수로 도형을 옮기지 않습니다.',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: guide.isEmpty ? null : guide.clearAll,
+                icon: const Icon(Icons.delete_sweep_outlined),
+                label: Text('모두 삭제 (${guide.shapes.length}개)'),
+                style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

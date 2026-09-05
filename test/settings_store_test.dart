@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ghost_camera/grid_controller.dart';
 import 'package:ghost_camera/photo_stamp.dart';
 import 'package:ghost_camera/settings_store.dart';
+import 'package:ghost_camera/shape_guide.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -18,6 +19,8 @@ void main() {
     expect(s.lensDirection, CameraLensDirection.back);
     expect(s.gridType, GridType.thirds);
     expect(s.overlayOutline, false);
+    expect(s.shapeGuides, isEmpty);
+    expect(s.shapeGuidesLocked, false);
   });
 
   test('저장 후 다시 읽으면 값이 유지된다', () async {
@@ -30,6 +33,16 @@ void main() {
     s.setLensDirection(CameraLensDirection.front);
     s.setGridType(GridType.goldenRatio);
     s.setOverlayOutline(true);
+    s.setShapeGuides(const [
+      ShapeGuide(
+        id: 's1',
+        type: ShapeGuideType.circle,
+        cx: 0.3,
+        cy: 0.4,
+        size: 0.25,
+      ),
+    ]);
+    s.setShapeGuidesLocked(true);
 
     final again = await SettingsStore.load();
     expect(again.silentShutter, true);
@@ -39,6 +52,10 @@ void main() {
     expect(again.lensDirection, CameraLensDirection.front);
     expect(again.gridType, GridType.goldenRatio);
     expect(again.overlayOutline, true);
+    expect(again.shapeGuides.single.id, 's1');
+    expect(again.shapeGuides.single.type, ShapeGuideType.circle);
+    expect(again.shapeGuides.single.cx, 0.3);
+    expect(again.shapeGuidesLocked, true);
   });
 
   test('손상된 enum 인덱스는 기본값으로 폴백', () async {

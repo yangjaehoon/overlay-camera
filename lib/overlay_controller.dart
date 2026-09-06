@@ -7,6 +7,12 @@ import 'overlay_outline.dart';
 import 'settings_store.dart';
 import 'work_dir.dart';
 
+/// 위치·크기 드래그 같은 잦은 전이가 아니라 구조 변경(파일 교체·모드 토글·
+/// 투명도 확정 등)에만 알리는 채널.
+class _StructureBus extends ChangeNotifier {
+  void ping() => notifyListeners();
+}
+
 /// 고스트 오버레이의 상태(이미지·투명도·변형·잠금·자동사용)를 담당한다.
 /// 드래그처럼 잦은 갱신이 카메라 프리뷰까지 리빌드하지 않도록 별도 [ChangeNotifier]로 분리.
 class OverlayController extends ChangeNotifier {
@@ -27,6 +33,11 @@ class OverlayController extends ChangeNotifier {
   bool _locked = false;
   bool _autoUseLast = true;
   bool _disposed = false;
+
+  /// 위치 드래그(onScaleUpdate)에는 반응하지 않아야 하는 위젯(우측 컨트롤 패널,
+  /// 상단 바 버튼 등)이 구독하는 채널.
+  final _StructureBus _structure = _StructureBus();
+  Listenable get structure => _structure;
 
   // 흰색 윤곽선 모드: 사진 대신 가장자리만 뽑은 투명 PNG를 보여준다.
   bool _outlineMode = false;
@@ -60,11 +71,20 @@ class OverlayController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _structure.dispose();
     super.dispose();
   }
 
+  /// 잦은 전이(위치·크기 드래그)용. 오버레이 레이어만 반응하면 된다.
   void _notify() {
     if (!_disposed) notifyListeners();
+  }
+
+  /// 구조 변경용. 메인 알림 + 구조 채널을 함께 울린다.
+  void _notifyStructural() {
+    if (_disposed) return;
+    notifyListeners();
+    _structure.ping();
   }
 
   /// 저장된 설정으로 초기 상태를 맞춘다.
@@ -75,7 +95,7 @@ class OverlayController extends ChangeNotifier {
     _outlineMode = s.overlayOutline;
     _mirrored = s.overlayMirror;
     _inverted = s.overlayInvert;
-    _notify();
+    _notifyStructural();
     if (_outlineMode) unawaited(_ensureOutline());
   }
 
@@ -86,7 +106,7 @@ class OverlayController extends ChangeNotifier {
     _file = f;
     _outlineFile = null; // 새 사진이니 이전 윤곽선은 더 이상 유효하지 않다.
     _resetTransform();
-    _notify();
+    _notifyStructural();
     if (old != null && old.path != f.path) workDir.deleteIfOwned(old);
     if (oldOutline != null) workDir.deleteIfOwned(oldOutline);
     if (_outlineMode) unawaited(_ensureOutline());
@@ -98,7 +118,7 @@ class OverlayController extends ChangeNotifier {
     _file = null;
     _outlineFile = null;
     _locked = false;
-    _notify();
+    _notifyStructural();
     if (old != null) workDir.deleteIfOwned(old);
     if (oldOutline != null) workDir.deleteIfOwned(oldOutline);
   }
@@ -107,7 +127,7 @@ class OverlayController extends ChangeNotifier {
   void toggleOutline() {
     _outlineMode = !_outlineMode;
     settings?.setOverlayOutline(_outlineMode);
-    _notify();
+    _notifyStructural();
     if (_outlineMode) unawaited(_ensureOutline());
   }
 
@@ -115,7 +135,7 @@ class OverlayController extends ChangeNotifier {
     final source = _file;
     if (source == null || _outlineFile != null || _tracingOutline) return;
     _tracingOutline = true;
-    _notify();
+    _notifyStructural();
     try {
       final dst = await workDir.reserve('outline', ext: 'png');
       final traced = await traceOutline(source, dst);
@@ -133,7 +153,7 @@ class OverlayController extends ChangeNotifier {
       onMessage?.call('윤곽선을 추출하지 못해 원본으로 되돌렸습니다.');
     } finally {
       _tracingOutline = false;
-      _notify();
+      _notifyStructural();
     }
   }
 
@@ -142,7 +162,7 @@ class OverlayController extends ChangeNotifier {
     if (_file == null) return;
     _mirrored = !_mirrored;
     settings?.setOverlayMirror(_mirrored);
-    _notify();
+    _notifyStructural();
   }
 
   /// 오버레이 색 반전(네거티브)을 켜고 끈다.
@@ -150,7 +170,7 @@ class OverlayController extends ChangeNotifier {
     if (_file == null) return;
     _inverted = !_inverted;
     settings?.setOverlayInvert(_inverted);
-    _notify();
+    _notifyStructural();
   }
 
   void _resetTransform() {
@@ -161,32 +181,33 @@ class OverlayController extends ChangeNotifier {
 
   void resetTransform() {
     _resetTransform();
-    _notify();
+    _notifyStructural();
   }
 
   void toggleLock() {
     if (_file == null) return;
     _locked = !_locked;
-    _notify();
+    _notifyStructural();
   }
 
-  /// 드래그 중 실시간 갱신(저장 안 함).
+  /// 투명도 슬라이더 드래그 중 실시간 갱신(저장 안 함).
+  /// 우측 패널의 % 표시도 갱신돼야 하므로 구조 알림.
   void setOpacity(double v) {
     _opacity = v;
-    _notify();
+    _notifyStructural();
   }
 
   /// 드래그 종료 시 확정 + 저장.
   void commitOpacity(double v) {
     _opacity = v;
     settings?.setOverlayOpacity(v);
-    _notify();
+    _notifyStructural();
   }
 
   void toggleAutoUseLast() {
     _autoUseLast = !_autoUseLast;
     settings?.setAutoUseLastShot(_autoUseLast);
-    _notify();
+    _notifyStructural();
   }
 
   void onScaleStart(ScaleStartDetails details) {

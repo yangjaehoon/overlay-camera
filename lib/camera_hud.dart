@@ -1204,8 +1204,19 @@ class RightControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = metrics;
-    final sliderLen = (m.size.height * 0.30)
-        .clamp(140.0, m.isTablet ? 420.0 : 260.0)
+    final toggleH = m.spc(32, 28.0, 40.0);
+    // 고정 요소(아이콘 + % + 토글 3개 + 간격 + 세로 패딩) 높이.
+    final fixedH = m.spc(18, 16.0, 26.0) +
+        m.spc(12, 11.0, 16.0) +
+        m.sp(10) +
+        toggleH * 3 +
+        m.sp(8) * 2 +
+        m.sp(24);
+    // 상단 바·하단 바와 안 겹치도록 패널이 쓸 수 있는 세로 공간을 제한하고,
+    // 그 안에서 남는 만큼만 슬라이더에 준다(작은 폰에서 아이콘이 잘리지 않게).
+    final maxPanelH = m.size.height - m.padding.vertical - m.sp(300);
+    final sliderLen = (maxPanelH - fixedH)
+        .clamp(96.0, m.isTablet ? 420.0 : 260.0)
         .toDouble();
     final hasOverlay = overlay.hasFile;
     return SafeArea(

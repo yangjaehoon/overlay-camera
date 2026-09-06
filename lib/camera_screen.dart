@@ -284,8 +284,10 @@ class _CameraScreenState extends State<CameraScreen> {
         // 프리뷰 탭 → 초점·노출, 길게 눌러 AE/AF 고정. 오버레이·도형보다 위에 둬서
         // 탭은 여기서 잡고 드래그는 아래로 넘긴다(translucent).
         FocusLayer(session: _session),
+        // 아래 세 위젯은 오버레이 위치 드래그에는 반응할 필요가 없어
+        // 전이 알림을 뺀 _overlay.structure 만 구독한다(드래그 중 리빌드 X).
         ListenableBuilder(
-          listenable: _overlay,
+          listenable: _overlay.structure,
           builder: (_, _) => OverlayQuickClear(overlay: _overlay, metrics: m),
         ),
         ListenableBuilder(
@@ -295,7 +297,9 @@ class _CameraScreenState extends State<CameraScreen> {
         ListenableBuilder(
           // _shapeGuide 는 도형 드래그마다 알림을 쏘므로 여기서 제외하고,
           // TopBar 안의 도형 버튼만 자체 ListenableBuilder 로 갱신한다.
-          listenable: Listenable.merge([_session, _stamp, _overlay, _grid]),
+          // _overlay 도 위치 드래그는 빼고 structure 만.
+          listenable:
+              Listenable.merge([_session, _stamp, _overlay.structure, _grid]),
           builder: (_, _) => TopBar(
             session: _session,
             stamp: _stamp,
@@ -308,7 +312,8 @@ class _CameraScreenState extends State<CameraScreen> {
           ),
         ),
         ListenableBuilder(
-          listenable: _overlay,
+          // 투명도 확정·모드 토글에만 반응하면 되므로 위치 드래그 알림은 제외.
+          listenable: _overlay.structure,
           builder: (_, _) => RightControls(overlay: _overlay, metrics: m),
         ),
         ListenableBuilder(

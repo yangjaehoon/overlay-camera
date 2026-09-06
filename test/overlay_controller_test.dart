@@ -132,6 +132,40 @@ void main() {
     c.dispose();
   });
 
+  test('setFile 해도 좌우 반전·색 반전은 유지된다(끈끈한 설정)', () {
+    final c = OverlayController(workDir: WorkDir())..setFile(File('/a.jpg'));
+    c.toggleMirror();
+    c.toggleInvert();
+
+    c.setFile(File('/b.jpg')); // 다른 사진으로 교체
+    expect(c.mirrored, true);
+    expect(c.inverted, true);
+    // 변형은 초기화되지만 반전 옵션은 남는다.
+    expect(c.scale, 1.0);
+    c.dispose();
+  });
+
+  test('구조 채널은 위치 드래그(onScaleUpdate)에는 반응하지 않는다', () {
+    final c = OverlayController(workDir: WorkDir())..setFile(File('/a.jpg'));
+    var main = 0;
+    var structural = 0;
+    c.addListener(() => main++);
+    c.structure.addListener(() => structural++);
+    final m0 = main;
+    final s0 = structural;
+
+    c.onScaleStart(ScaleStartDetails());
+    c.onScaleUpdate(ScaleUpdateDetails(focalPointDelta: const Offset(5, 5)));
+    c.onScaleUpdate(ScaleUpdateDetails(focalPointDelta: const Offset(5, 5)));
+    expect(main, greaterThan(m0)); // 메인은 매 프레임 울림
+    expect(structural, s0); // 구조 채널은 조용
+
+    c.toggleMirror();
+    expect(structural, greaterThan(s0)); // 토글은 구조 채널도 울림
+
+    c.dispose();
+  });
+
   test('toggleOutline은 추출 완료 후 displayFile을 윤곽선 파일로 바꾼다', () async {
     final c = OverlayController(workDir: WorkDir());
     c.setFile(makeRealImage());

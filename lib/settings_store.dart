@@ -25,6 +25,8 @@ class SettingsStore {
   static const _kLens = 'lensDirection';
   static const _kGrid = 'gridType';
   static const _kOutline = 'overlayOutline';
+  static const _kMirror = 'overlayMirror';
+  static const _kInvert = 'overlayInvert';
   static const _kShapes = 'shapeGuides';
   static const _kShapePresets = 'shapeGuidePresets';
   static const _kTimer = 'timerSeconds';
@@ -77,6 +79,12 @@ class SettingsStore {
 
   bool get overlayOutline => _prefs.getBool(_kOutline) ?? false;
   void setOverlayOutline(bool v) => _prefs.setBool(_kOutline, v);
+
+  bool get overlayMirror => _prefs.getBool(_kMirror) ?? false;
+  void setOverlayMirror(bool v) => _prefs.setBool(_kMirror, v);
+
+  bool get overlayInvert => _prefs.getBool(_kInvert) ?? false;
+  void setOverlayInvert(bool v) => _prefs.setBool(_kInvert, v);
 
   List<ShapeGuide> get shapeGuides =>
       decodeShapeGuides(_prefs.getString(_kShapes));

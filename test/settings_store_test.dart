@@ -19,6 +19,8 @@ void main() {
     expect(s.lensDirection, CameraLensDirection.back);
     expect(s.gridType, GridType.thirds);
     expect(s.overlayOutline, false);
+    expect(s.overlayMirror, false);
+    expect(s.overlayInvert, false);
     expect(s.shapeGuides, isEmpty);
     expect(s.shapeGuidePresets, isEmpty);
     expect(s.timerSeconds, 0);
@@ -43,6 +45,8 @@ void main() {
     s.setLensDirection(CameraLensDirection.front);
     s.setGridType(GridType.goldenRatio);
     s.setOverlayOutline(true);
+    s.setOverlayMirror(true);
+    s.setOverlayInvert(true);
     s.setTimerSeconds(10);
     s.setShapeGuides(const [
       ShapeGuide(
@@ -77,6 +81,8 @@ void main() {
     expect(again.lensDirection, CameraLensDirection.front);
     expect(again.gridType, GridType.goldenRatio);
     expect(again.overlayOutline, true);
+    expect(again.overlayMirror, true);
+    expect(again.overlayInvert, true);
     expect(again.timerSeconds, 10);
     expect(again.shapeGuides.single.id, 's1');
     expect(again.shapeGuides.single.type, ShapeGuideType.circle);

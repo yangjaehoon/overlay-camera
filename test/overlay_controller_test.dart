@@ -102,6 +102,36 @@ void main() {
     c.dispose();
   });
 
+  test('toggleMirror / toggleInvert 는 파일이 있을 때만 동작하고 뒤집는다', () {
+    final c = OverlayController(workDir: WorkDir());
+    c.toggleMirror();
+    c.toggleInvert();
+    expect(c.mirrored, false); // 파일 없음 → 무시
+    expect(c.inverted, false);
+
+    c.setFile(File('/tmp/a.jpg'));
+    c.toggleMirror();
+    c.toggleInvert();
+    expect(c.mirrored, true);
+    expect(c.inverted, true);
+
+    c.toggleMirror();
+    expect(c.mirrored, false);
+    c.dispose();
+  });
+
+  test('hydrate 로 좌우 반전·색 반전 상태를 복원한다', () async {
+    SharedPreferences.setMockInitialValues({
+      'overlayMirror': true,
+      'overlayInvert': true,
+    });
+    final s = await SettingsStore.load();
+    final c = OverlayController(workDir: WorkDir())..hydrate(s);
+    expect(c.mirrored, true);
+    expect(c.inverted, true);
+    c.dispose();
+  });
+
   test('toggleOutline은 추출 완료 후 displayFile을 윤곽선 파일로 바꾼다', () async {
     final c = OverlayController(workDir: WorkDir());
     c.setFile(makeRealImage());

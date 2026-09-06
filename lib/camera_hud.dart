@@ -311,6 +311,14 @@ class CountdownOverlay extends StatelessWidget {
   }
 }
 
+/// 색 반전(네거티브) ColorFilter. RGB를 뒤집는다.
+const ColorFilter _invertColorFilter = ColorFilter.matrix(<double>[
+  -1, 0, 0, 0, 255, //
+  0, -1, 0, 0, 255, //
+  0, 0, -1, 0, 255, //
+  0, 0, 0, 1, 0, //
+]);
+
 /// 반투명 고스트 오버레이 + 확대·이동·회전 제스처.
 class OverlayLayer extends StatelessWidget {
   const OverlayLayer({super.key, required this.overlay});
@@ -324,6 +332,12 @@ class OverlayLayer extends StatelessWidget {
     final file = overlay.displayFile!;
 
     Widget image = Image.file(file, fit: BoxFit.contain, gaplessPlayback: true);
+    if (overlay.inverted) {
+      image = ColorFiltered(colorFilter: _invertColorFilter, child: image);
+    }
+    if (overlay.mirrored) {
+      image = Transform.flip(flipX: true, child: image);
+    }
     image = Transform.scale(scale: overlay.scale, child: image);
     image = Transform.rotate(angle: overlay.rotation, child: image);
     image = Transform.translate(offset: overlay.offset, child: image);
@@ -1237,7 +1251,73 @@ class RightControls extends StatelessWidget {
               ),
               SizedBox(height: m.sp(10)),
               _OutlineToggle(overlay: overlay, metrics: m),
+              SizedBox(height: m.sp(8)),
+              _OverlayIconToggle(
+                icon: Icons.flip,
+                tooltip: '좌우 반전',
+                active: overlay.mirrored,
+                enabled: hasOverlay,
+                onTap: overlay.toggleMirror,
+                metrics: m,
+              ),
+              SizedBox(height: m.sp(8)),
+              _OverlayIconToggle(
+                icon: Icons.invert_colors,
+                tooltip: '색 반전',
+                active: overlay.inverted,
+                enabled: hasOverlay,
+                onTap: overlay.toggleInvert,
+                metrics: m,
+              ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 우측 패널용 소형 아이콘 토글(켜짐=앰버, 비활성=흐림).
+class _OverlayIconToggle extends StatelessWidget {
+  const _OverlayIconToggle({
+    required this.icon,
+    required this.tooltip,
+    required this.active,
+    required this.enabled,
+    required this.onTap,
+    required this.metrics,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final bool active;
+  final bool enabled;
+  final VoidCallback onTap;
+  final Metrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = metrics;
+    final size = m.spc(32, 28.0, 40.0);
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: enabled ? onTap : null,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Icon(
+              icon,
+              size: m.spc(20, 18.0, 26.0),
+              color: !enabled
+                  ? Colors.white24
+                  : active
+                      ? Colors.amber
+                      : Colors.white,
+            ),
           ),
         ),
       ),

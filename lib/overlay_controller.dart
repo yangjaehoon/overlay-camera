@@ -33,6 +33,10 @@ class OverlayController extends ChangeNotifier {
   File? _outlineFile;
   bool _tracingOutline = false;
 
+  // 정합 보조: 좌우 반전(전면/후면 카메라 미러 차이 대응), 색 반전(네거티브 고스트).
+  bool _mirrored = false;
+  bool _inverted = false;
+
   // 제스처 시작 시점 기준값
   double _baseScale = 1.0;
   double _baseRotation = 0.0;
@@ -47,6 +51,8 @@ class OverlayController extends ChangeNotifier {
   bool get autoUseLast => _autoUseLast;
   bool get outlineMode => _outlineMode;
   bool get tracingOutline => _tracingOutline;
+  bool get mirrored => _mirrored;
+  bool get inverted => _inverted;
 
   /// 실제로 그릴 파일. 윤곽선 모드면 추출된 윤곽선을(처리 중이면 원본을 대신) 보여준다.
   File? get displayFile => _outlineMode ? (_outlineFile ?? _file) : _file;
@@ -67,6 +73,8 @@ class OverlayController extends ChangeNotifier {
     _autoUseLast = s.autoUseLastShot;
     _opacity = s.overlayOpacity;
     _outlineMode = s.overlayOutline;
+    _mirrored = s.overlayMirror;
+    _inverted = s.overlayInvert;
     _notify();
     if (_outlineMode) unawaited(_ensureOutline());
   }
@@ -127,6 +135,22 @@ class OverlayController extends ChangeNotifier {
       _tracingOutline = false;
       _notify();
     }
+  }
+
+  /// 오버레이 좌우 반전을 켜고 끈다.
+  void toggleMirror() {
+    if (_file == null) return;
+    _mirrored = !_mirrored;
+    settings?.setOverlayMirror(_mirrored);
+    _notify();
+  }
+
+  /// 오버레이 색 반전(네거티브)을 켜고 끈다.
+  void toggleInvert() {
+    if (_file == null) return;
+    _inverted = !_inverted;
+    settings?.setOverlayInvert(_inverted);
+    _notify();
   }
 
   void _resetTransform() {

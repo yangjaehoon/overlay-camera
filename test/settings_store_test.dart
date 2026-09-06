@@ -21,6 +21,16 @@ void main() {
     expect(s.overlayOutline, false);
     expect(s.shapeGuides, isEmpty);
     expect(s.shapeGuidePresets, isEmpty);
+    expect(s.timerSeconds, 0);
+  });
+
+  test('timerSeconds 는 3·10만 유효하고 그 외는 0', () async {
+    SharedPreferences.setMockInitialValues({'timerSeconds': 7});
+    expect((await SettingsStore.load()).timerSeconds, 0);
+    SharedPreferences.setMockInitialValues({'timerSeconds': 3});
+    expect((await SettingsStore.load()).timerSeconds, 3);
+    SharedPreferences.setMockInitialValues({'timerSeconds': 10});
+    expect((await SettingsStore.load()).timerSeconds, 10);
   });
 
   test('저장 후 다시 읽으면 값이 유지된다', () async {
@@ -33,6 +43,7 @@ void main() {
     s.setLensDirection(CameraLensDirection.front);
     s.setGridType(GridType.goldenRatio);
     s.setOverlayOutline(true);
+    s.setTimerSeconds(10);
     s.setShapeGuides(const [
       ShapeGuide(
         id: 's1',
@@ -66,6 +77,7 @@ void main() {
     expect(again.lensDirection, CameraLensDirection.front);
     expect(again.gridType, GridType.goldenRatio);
     expect(again.overlayOutline, true);
+    expect(again.timerSeconds, 10);
     expect(again.shapeGuides.single.id, 's1');
     expect(again.shapeGuides.single.type, ShapeGuideType.circle);
     expect(again.shapeGuides.single.cx, 0.3);

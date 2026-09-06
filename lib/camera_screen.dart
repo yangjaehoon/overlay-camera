@@ -95,25 +95,29 @@ class _CameraScreenState extends State<CameraScreen> {
   // ---------------------------------------------------------------------------
 
   Future<void> _takePhoto() async {
+    if (_session.isCountingDown) {
+      _session.cancelCountdown();
+      return;
+    }
     if (!_session.isReady || _session.isRecording) return;
-    await _session.runExclusive(() async {
-      final raw = await _session.capturePhoto();
-      if (raw == null) {
-        _toast('사진을 찍지 못했습니다.');
-        return;
-      }
-      final finalFile = await _stamp.applyTo(raw);
-      if (finalFile.path != raw.path) _workDir.deleteIfOwned(raw);
-      await _gallery.saveImage(finalFile.path);
-      if (_overlay.autoUseLast) {
-        _overlay.setFile(finalFile);
-      } else {
-        _workDir.deleteIfOwned(finalFile);
-      }
-      _toast(
-        _session.silentShutter ? '무음으로 사진을 저장했습니다.' : '사진을 갤러리에 저장했습니다.',
-      );
-    });
+    await _session.runWithTimer(() => _session.runExclusive(() async {
+          final raw = await _session.capturePhoto();
+          if (raw == null) {
+            _toast('사진을 찍지 못했습니다.');
+            return;
+          }
+          final finalFile = await _stamp.applyTo(raw);
+          if (finalFile.path != raw.path) _workDir.deleteIfOwned(raw);
+          await _gallery.saveImage(finalFile.path);
+          if (_overlay.autoUseLast) {
+            _overlay.setFile(finalFile);
+          } else {
+            _workDir.deleteIfOwned(finalFile);
+          }
+          _toast(
+            _session.silentShutter ? '무음으로 사진을 저장했습니다.' : '사진을 갤러리에 저장했습니다.',
+          );
+        }));
   }
 
   Future<void> _snapshotToOverlay() async {
@@ -130,14 +134,24 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _toggleRecording() async {
-    await _session.toggleRecording(onStopped: (mp4) async {
-      await _gallery.saveVideo(mp4.path);
-      if (_overlay.autoUseLast) {
-        await _setOverlayFromVideoLastFrame(mp4.path);
-      }
-      _workDir.deleteIfOwned(mp4);
-      _toast('동영상을 갤러리에 저장했습니다.');
-    });
+    if (_session.isCountingDown) {
+      _session.cancelCountdown();
+      return;
+    }
+    Future<void> toggle() => _session.toggleRecording(onStopped: (mp4) async {
+          await _gallery.saveVideo(mp4.path);
+          if (_overlay.autoUseLast) {
+            await _setOverlayFromVideoLastFrame(mp4.path);
+          }
+          _workDir.deleteIfOwned(mp4);
+          _toast('동영상을 갤러리에 저장했습니다.');
+        });
+    // 정지는 즉시, 시작은 타이머를 태운다.
+    if (_session.isRecording) {
+      await toggle();
+    } else {
+      await _session.runWithTimer(toggle);
+    }
   }
 
   Future<void> _setOverlayFromVideoLastFrame(String videoPath) async {
@@ -318,6 +332,14 @@ class _CameraScreenState extends State<CameraScreen> {
           listenable: _shapeGuide.structure,
           builder: (_, _) =>
               ShapeGuideEditBanner(guide: _shapeGuide, metrics: m),
+        ),
+        // 셀프타이머 카운트다운은 화면 전체를 덮어 가장 위에 그린다.
+        ListenableBuilder(
+          listenable: _session,
+          builder: (_, _) => CountdownOverlay(
+            session: _session,
+            onCancel: _session.cancelCountdown,
+          ),
         ),
       ],
     );

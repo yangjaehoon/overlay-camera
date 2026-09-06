@@ -28,6 +28,17 @@ IconData flashIcon(FlashMode mode) {
   }
 }
 
+IconData timerIcon(int seconds) {
+  switch (seconds) {
+    case 3:
+      return Icons.timer_3;
+    case 10:
+      return Icons.timer_10;
+    default:
+      return Icons.timer_off_outlined;
+  }
+}
+
 /// 전체 화면 카메라 프리뷰 (화면을 덮도록 확대).
 class CameraPreviewArea extends StatelessWidget {
   const CameraPreviewArea({super.key, required this.session});
@@ -238,6 +249,63 @@ class _FocusReticle extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// 셀프타이머 카운트다운. [session.countdown] > 0 일 때 화면 전체에 큰 숫자를
+/// 띄우고, 아무 데나 탭하면 [onCancel]로 취소한다.
+class CountdownOverlay extends StatelessWidget {
+  const CountdownOverlay({
+    super.key,
+    required this.session,
+    required this.onCancel,
+  });
+
+  final CameraSession session;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final n = session.countdown;
+    if (n <= 0) return const SizedBox.shrink();
+    return Positioned.fill(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onCancel,
+        child: ColoredBox(
+          color: Colors.black.withValues(alpha: 0.45),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TweenAnimationBuilder<double>(
+                  key: ValueKey(n),
+                  tween: Tween(begin: 1.35, end: 1.0),
+                  duration: const Duration(milliseconds: 320),
+                  curve: Curves.easeOut,
+                  builder: (context, scale, child) =>
+                      Transform.scale(scale: scale, child: child),
+                  child: Text(
+                    '$n',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 120,
+                      fontWeight: FontWeight.w300,
+                      shadows: [Shadow(color: Colors.black54, blurRadius: 12)],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '탭하면 취소',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -880,6 +948,16 @@ class TopBar extends StatelessWidget {
                   iconSize: icon,
                   tooltip: '플래시',
                   onTap: session.cycleFlash,
+                ),
+                BarButton(
+                  icon: timerIcon(session.timerSeconds),
+                  color: session.timerSeconds == 0
+                      ? Colors.white
+                      : Colors.amber,
+                  size: btn,
+                  iconSize: icon,
+                  tooltip: '셀프타이머',
+                  onTap: session.cycleTimer,
                 ),
                 BarButton(
                   icon: grid.type.icon,

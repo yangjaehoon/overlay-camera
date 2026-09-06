@@ -27,9 +27,18 @@ class SettingsStore {
   static const _kOutline = 'overlayOutline';
   static const _kShapes = 'shapeGuides';
   static const _kShapePresets = 'shapeGuidePresets';
+  static const _kTimer = 'timerSeconds';
 
   bool get silentShutter => _prefs.getBool(_kSilent) ?? false;
   void setSilentShutter(bool v) => _prefs.setBool(_kSilent, v);
+
+  /// 셀프타이머 초. 0(끔)/3/10만 유효하고, 그 외 값은 0으로 간주한다.
+  int get timerSeconds {
+    final v = _prefs.getInt(_kTimer) ?? 0;
+    return (v == 3 || v == 10) ? v : 0;
+  }
+
+  void setTimerSeconds(int v) => _prefs.setInt(_kTimer, v);
 
   bool get stampEnabled => _prefs.getBool(_kStamp) ?? false;
   void setStampEnabled(bool v) => _prefs.setBool(_kStamp, v);

@@ -1,4 +1,5 @@
 import 'package:camera_platform_interface/camera_platform_interface.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -132,6 +133,90 @@ void main() {
   test('dispose 후 상태 변경 메서드를 불러도 예외가 없다', () {
     final session = CameraSession(workDir: WorkDir())..dispose();
     expect(session.toggleSilentShutter, returnsNormally);
+  });
+
+  group('셀프타이머', () {
+    test('cycleTimer 는 0 → 3 → 10 → 0 순환', () {
+      final session = CameraSession(workDir: WorkDir());
+      expect(session.timerSeconds, 0);
+      session.cycleTimer();
+      expect(session.timerSeconds, 3);
+      session.cycleTimer();
+      expect(session.timerSeconds, 10);
+      session.cycleTimer();
+      expect(session.timerSeconds, 0);
+      session.dispose();
+    });
+
+    test('hydrate 로 타이머 값을 복원한다', () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = await SettingsStore.load();
+      store.setTimerSeconds(10);
+
+      final session = CameraSession(workDir: WorkDir())
+        ..hydrate(await SettingsStore.load());
+      expect(session.timerSeconds, 10);
+      session.dispose();
+    });
+
+    test('타이머 0이면 runWithTimer 는 즉시 실행', () async {
+      final session = CameraSession(workDir: WorkDir());
+      var ran = false;
+      await session.runWithTimer(() async => ran = true);
+      expect(ran, true);
+      expect(session.isCountingDown, false);
+      session.dispose();
+    });
+
+    test('타이머가 켜져 있으면 카운트다운 뒤 실행된다', () {
+      fakeAsync((async) {
+        final session = CameraSession(workDir: WorkDir())..cycleTimer(); // 3초
+        var ran = false;
+        session.runWithTimer(() async => ran = true);
+
+        expect(session.countdown, 3);
+        expect(ran, false);
+
+        async.elapse(const Duration(seconds: 1));
+        expect(session.countdown, 2);
+        async.elapse(const Duration(seconds: 2));
+        expect(session.countdown, 0);
+        async.flushMicrotasks();
+        expect(ran, true);
+
+        session.dispose();
+      });
+    });
+
+    test('카운트다운 중 cancelCountdown 하면 촬영하지 않는다', () {
+      fakeAsync((async) {
+        final session = CameraSession(workDir: WorkDir())..cycleTimer();
+        var ran = false;
+        session.runWithTimer(() async => ran = true);
+
+        async.elapse(const Duration(seconds: 1));
+        session.cancelCountdown();
+        expect(session.countdown, 0);
+        expect(session.isCountingDown, false);
+
+        async.elapse(const Duration(seconds: 5));
+        async.flushMicrotasks();
+        expect(ran, false);
+
+        session.dispose();
+      });
+    });
+
+    test('카운트다운 중에는 cycleTimer 가 무시된다', () {
+      fakeAsync((async) {
+        final session = CameraSession(workDir: WorkDir())..cycleTimer();
+        session.runWithTimer(() async {});
+        session.cycleTimer(); // 무시돼야 함
+        expect(session.timerSeconds, 3);
+        session.cancelCountdown();
+        session.dispose();
+      });
+    });
   });
 
   group('focusAt', () {

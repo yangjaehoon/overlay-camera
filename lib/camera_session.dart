@@ -49,7 +49,13 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   bool _silentShutter = false;
   bool _aeAfLocked = false;
   bool _focusing = false;
+  int _timerSeconds = 0;
+  int _countdown = 0;
+  Timer? _countdownTimer;
+  Completer<bool>? _countdownDone;
   bool _disposed = false;
+
+  static const _timerOrder = [0, 3, 10];
 
   CameraController? get controller => _controller;
   bool get isReady => _controller?.value.isInitialized ?? false;
@@ -63,11 +69,19 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   /// 초점·노출이 한 지점에 고정돼 있는지. 테이크마다 밝기가 튀지 않게 할 때 켠다.
   bool get aeAfLocked => _aeAfLocked;
 
+  /// 셀프타이머 초(0=끔/3/10).
+  int get timerSeconds => _timerSeconds;
+
+  /// 카운트다운 중 남은 초(0=진행 안 함).
+  int get countdown => _countdown;
+  bool get isCountingDown => _countdown > 0;
+
   void attach() => WidgetsBinding.instance.addObserver(this);
 
   @override
   void dispose() {
     _disposed = true;
+    _stopCountdown();
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
     super.dispose();
@@ -83,10 +97,11 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     _notify();
   }
 
-  /// 저장된 설정으로 초기 상태를 맞춘다. (플래시/무음)
+  /// 저장된 설정으로 초기 상태를 맞춘다. (플래시/무음/타이머)
   void hydrate(SettingsStore s) {
     settings = s;
     _silentShutter = s.silentShutter;
+    _timerSeconds = s.timerSeconds;
     // torch를 저장했다면 앱을 켜자마자 손전등이 켜지는 것을 막는다.
     _flashMode = s.flashMode == FlashMode.torch ? FlashMode.off : s.flashMode;
     _notify();
@@ -104,6 +119,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
       // 진행 중이던 촬영이 끊기면 상태가 잠길 수 있어 함께 되돌린다.
       _isRecording = false;
       _busy = false;
+      _stopCountdown(); // 진행 중이던 카운트다운도 취소
       controller?.dispose();
       _notify();
     } else if (state == AppLifecycleState.resumed) {
@@ -231,6 +247,58 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     _silentShutter = !_silentShutter;
     settings?.setSilentShutter(_silentShutter);
     _notify();
+  }
+
+  /// 셀프타이머를 0 → 3 → 10 → 0 순으로 바꾼다. 카운트다운 중이면 무시.
+  void cycleTimer() {
+    if (_countdown > 0) return;
+    final next = (_timerOrder.indexOf(_timerSeconds) + 1) % _timerOrder.length;
+    _timerSeconds = _timerOrder[next];
+    settings?.setTimerSeconds(_timerSeconds);
+    _notify();
+  }
+
+  /// 셀프타이머가 켜져 있으면 카운트다운 후, 아니면 즉시 [capture]를 실행한다.
+  /// 카운트다운 중 [cancelCountdown]이 불리면 [capture]는 실행되지 않는다.
+  Future<void> runWithTimer(Future<void> Function() capture) async {
+    if (_timerSeconds == 0) {
+      await capture();
+      return;
+    }
+    if (_countdown > 0) return; // 이미 카운트다운 중
+
+    final done = Completer<bool>();
+    _countdownDone = done;
+    _countdown = _timerSeconds;
+    _notify();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      _countdown--;
+      _notify();
+      if (_countdown <= 0) {
+        _countdownTimer?.cancel();
+        _countdownTimer = null;
+        if (!done.isCompleted) done.complete(true);
+      }
+    });
+
+    final finished = await done.future;
+    _countdownDone = null;
+    if (finished && !_disposed) await capture();
+  }
+
+  /// 진행 중인 카운트다운을 취소한다(촬영하지 않음).
+  void cancelCountdown() {
+    if (_countdown == 0) return;
+    _stopCountdown();
+    _notify();
+  }
+
+  void _stopCountdown() {
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+    _countdown = 0;
+    if (_countdownDone?.isCompleted == false) _countdownDone!.complete(false);
+    _countdownDone = null;
   }
 
   /// 프리뷰의 한 지점(0~1, 좌상단 원점)에 초점·노출을 맞춘다.

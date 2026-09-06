@@ -17,6 +17,7 @@ import 'overlay_controller.dart';
 import 'settings_store.dart';
 import 'shape_guide_controller.dart';
 import 'ui_metrics.dart';
+import 'volume_button.dart';
 import 'work_dir.dart';
 
 /// 라이브 카메라 프리뷰 위에 반투명 참조 사진(고스트)을 겹쳐 보여주고,
@@ -43,6 +44,7 @@ class _CameraScreenState extends State<CameraScreen> {
   late final GridController _grid;
   late final ShapeGuideController _shapeGuide;
   late final GalleryStore _gallery;
+  late final VolumeButton _volumeButton;
 
   bool _settingsLoaded = false;
 
@@ -55,11 +57,16 @@ class _CameraScreenState extends State<CameraScreen> {
     _grid = GridController();
     _shapeGuide = ShapeGuideController(onMessage: _toast);
     _gallery = GalleryStore(onMessage: _toast);
+    // 볼륨 버튼 = 셔터. 카메라가 준비됐을 때만 볼륨 키를 가로챈다(Android).
+    _volumeButton = VolumeButton(onShutter: _takePhoto);
+    _session.addListener(_syncVolumeButton);
     unawaited(_bootstrap());
   }
 
   @override
   void dispose() {
+    _session.removeListener(_syncVolumeButton);
+    _volumeButton.dispose();
     _session.dispose();
     _stamp.dispose();
     _overlay.dispose();
@@ -67,6 +74,9 @@ class _CameraScreenState extends State<CameraScreen> {
     _shapeGuide.dispose();
     super.dispose();
   }
+
+  void _syncVolumeButton() =>
+      unawaited(_volumeButton.setEnabled(_session.isReady));
 
   Future<void> _bootstrap() async {
     if (!_settingsLoaded) {

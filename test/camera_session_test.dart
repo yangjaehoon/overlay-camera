@@ -134,6 +134,38 @@ void main() {
     expect(session.toggleSilentShutter, returnsNormally);
   });
 
+  group('focusAt / clearFocusLock', () {
+    test('기본 aeAfLocked 는 false', () {
+      final session = CameraSession(workDir: WorkDir());
+      expect(session.aeAfLocked, false);
+      session.dispose();
+    });
+
+    test('카메라가 준비 안 됐으면 focusAt 은 조용히 무시된다', () async {
+      final session = CameraSession(workDir: WorkDir());
+      var notified = 0;
+      session.addListener(() => notified++);
+
+      await session.focusAt(const Offset(0.5, 0.5), lock: true);
+
+      expect(session.aeAfLocked, false);
+      expect(notified, 0); // 컨트롤러 없으면 상태 변경/알림 없음
+      session.dispose();
+    });
+
+    test('clearFocusLock 은 잠금을 풀고 한 번 알린다', () async {
+      final session = CameraSession(workDir: WorkDir());
+      var notified = 0;
+      session.addListener(() => notified++);
+
+      await session.clearFocusLock();
+
+      expect(session.aeAfLocked, false);
+      expect(notified, 1);
+      session.dispose();
+    });
+  });
+
   group('bootstrap', () {
     test('권한 거부 시 안내 메시지 설정', () async {
       mockPermissions(granted: false);

@@ -47,6 +47,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   bool _bootstrapping = false;
   String? _statusMessage;
   bool _silentShutter = false;
+  bool _aeAfLocked = false;
   bool _disposed = false;
 
   CameraController? get controller => _controller;
@@ -57,6 +58,9 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   FlashMode get flashMode => _flashMode;
   bool get silentShutter => _silentShutter;
   bool get canFlip => _cameras.length >= 2;
+
+  /// 초점·노출이 한 지점에 고정돼 있는지. 테이크마다 밝기가 튀지 않게 할 때 켠다.
+  bool get aeAfLocked => _aeAfLocked;
 
   void attach() => WidgetsBinding.instance.addObserver(this);
 
@@ -166,6 +170,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> retry() => bootstrap();
 
   Future<void> _initCamera(int index) async {
+    _aeAfLocked = false; // 새 컨트롤러는 연속 자동 초점/노출로 시작한다.
     final previous = _controller;
     final controller = CameraController(
       _cameras[index],
@@ -225,6 +230,46 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     _silentShutter = !_silentShutter;
     settings?.setSilentShutter(_silentShutter);
     _notify();
+  }
+
+  /// 프리뷰의 한 지점(0~1, 좌상단 원점)에 초점·노출을 맞춘다.
+  /// [lock]이면 그 상태로 고정해 이후 자동 조정을 멈춘다.
+  Future<void> focusAt(Offset point, {bool lock = false}) async {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    final p = Offset(point.dx.clamp(0.0, 1.0), point.dy.clamp(0.0, 1.0));
+    try {
+      // 일부 기기는 locked 상태에선 point 변경이 안 먹으므로 먼저 auto로 푼다.
+      await c.setFocusMode(FocusMode.auto);
+      await c.setExposureMode(ExposureMode.auto);
+      await c.setFocusPoint(p);
+      await c.setExposurePoint(p);
+      if (lock) {
+        await c.setFocusMode(FocusMode.locked);
+        await c.setExposureMode(ExposureMode.locked);
+      }
+      _aeAfLocked = lock;
+      _notify();
+    } on CameraException catch (e) {
+      // 초점/노출 제어를 지원하지 않는 기기·렌즈
+      debugPrint('초점/노출 설정 실패: $e');
+    }
+  }
+
+  /// 초점·노출 고정을 풀고 연속 자동으로 되돌린다.
+  Future<void> clearFocusLock() async {
+    final c = _controller;
+    _aeAfLocked = false;
+    _notify();
+    if (c == null || !c.value.isInitialized) return;
+    try {
+      await c.setFocusMode(FocusMode.auto);
+      await c.setExposureMode(ExposureMode.auto);
+      await c.setFocusPoint(null);
+      await c.setExposurePoint(null);
+    } on CameraException catch (e) {
+      debugPrint('초점/노출 해제 실패: $e');
+    }
   }
 
   /// [action]을 촬영 중복 없이(busy 플래그로 보호) 실행한다.

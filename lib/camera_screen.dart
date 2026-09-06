@@ -257,6 +257,9 @@ class _CameraScreenState extends State<CameraScreen> {
           listenable: _shapeGuide,
           builder: (_, _) => ShapeGuideLayer(guide: _shapeGuide, metrics: m),
         ),
+        // 프리뷰 탭 → 초점·노출, 길게 눌러 AE/AF 고정. 오버레이·도형보다 위에 둬서
+        // 탭은 여기서 잡고 드래그는 아래로 넘긴다(translucent).
+        FocusLayer(session: _session),
         ListenableBuilder(
           listenable: _overlay,
           builder: (_, _) => OverlayQuickClear(overlay: _overlay, metrics: m),

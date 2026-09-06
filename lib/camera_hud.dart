@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
@@ -47,6 +48,148 @@ class CameraPreviewArea extends StatelessWidget {
         scale: scale,
         alignment: Alignment.center,
         child: Center(child: CameraPreview(controller)),
+      ),
+    );
+  }
+}
+
+/// 프리뷰를 탭하면 그 지점에 초점·노출을 맞추고, 길게 누르면 AE/AF를 고정한다.
+/// 탭(고정 상태에서)은 고정을 풀고 그 지점 자동 초점으로 돌아간다.
+/// translucent + onTapUp/onLongPress 만 처리해 드래그는 아래 레이어(오버레이·도형)로 넘긴다.
+class FocusLayer extends StatefulWidget {
+  const FocusLayer({super.key, required this.session});
+
+  final CameraSession session;
+
+  @override
+  State<FocusLayer> createState() => _FocusLayerState();
+}
+
+class _FocusLayerState extends State<FocusLayer>
+    with SingleTickerProviderStateMixin {
+  static const _reticleSize = 84.0;
+
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+  Offset? _pos; // 마지막 조준 지점(화면 좌표)
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    super.dispose();
+  }
+
+  void _focus(Offset local, Size size, {required bool lock}) {
+    if (!widget.session.isReady) return;
+    final norm = Offset(
+      (local.dx / size.width).clamp(0.0, 1.0),
+      (local.dy / size.height).clamp(0.0, 1.0),
+    );
+    unawaited(widget.session.focusAt(norm, lock: lock));
+    setState(() => _pos = local);
+    _anim.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTapUp: (d) => _focus(d.localPosition, size, lock: false),
+              onLongPressStart: (d) =>
+                  _focus(d.localPosition, size, lock: true),
+            ),
+          ),
+          AnimatedBuilder(
+            animation: Listenable.merge([_anim, widget.session]),
+            builder: (context, _) {
+              final pos = _pos;
+              final locked = widget.session.aeAfLocked;
+              // 조준 사각형: 고정 상태면 계속, 아니면 잠깐 보였다 사라진다.
+              if (pos == null || (!locked && _anim.isCompleted)) {
+                return const SizedBox.shrink();
+              }
+              return Positioned(
+                left: pos.dx - _reticleSize / 2,
+                top: pos.dy - _reticleSize / 2,
+                child: IgnorePointer(
+                  child: _FocusReticle(
+                    size: _reticleSize,
+                    t: _anim.value,
+                    locked: locked,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FocusReticle extends StatelessWidget {
+  const _FocusReticle({
+    required this.size,
+    required this.t,
+    required this.locked,
+  });
+
+  final double size;
+  final double t; // 애니메이션 진행 0~1
+  final bool locked;
+
+  @override
+  Widget build(BuildContext context) {
+    final ease = Curves.easeOut.transform(t.clamp(0.0, 1.0));
+    final scale = locked ? 1.0 : 1.0 + 0.3 * (1 - ease);
+    final opacity =
+        locked ? 1.0 : (t < 0.7 ? 1.0 : (1 - (t - 0.7) / 0.3)).clamp(0.0, 1.0);
+    final color = locked ? Colors.amber : Colors.white;
+    return Opacity(
+      opacity: opacity,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Transform.scale(
+            scale: scale,
+            child: Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                border: Border.all(color: color, width: 2),
+                borderRadius: BorderRadius.circular(4),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black45, blurRadius: 4),
+                ],
+              ),
+            ),
+          ),
+          if (locked) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.amber,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'AE/AF 잠금',
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -59,9 +59,9 @@ int nextBackLensIndex(List<CameraDescription> cameras, int currentIndex) {
   return pos < 0 ? -1 : backs[(pos + 1) % backs.length];
 }
 
-/// 줌 배율만 전달하는 경량 알림 채널. 드래그 중 매 프레임 호출되므로
+/// 줌·노출처럼 드래그 중 매 프레임 바뀌는 값 전용 경량 알림 채널.
 /// 전역 notifyListeners(하단바·상단바·프리뷰 리빌드)와 분리한다.
-class _ZoomBus extends ChangeNotifier {
+class _TickBus extends ChangeNotifier {
   void ping() => notifyListeners();
 }
 
@@ -87,10 +87,15 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   CameraController? _controller;
   int _index = 0;
   int _lastBackIndex = 0; // 마지막으로 쓴 후면 렌즈(전환 후 복귀용)
-  final _ZoomBus _zoomBus = _ZoomBus();
+  final _TickBus _zoomBus = _TickBus();
+  final _TickBus _evBus = _TickBus();
   double _zoom = 1.0;
   double _minZoom = 1.0;
   double _maxZoom = 1.0;
+  double _ev = 0.0; // 노출 보정(EV, 스톱)
+  double _minEv = 0.0;
+  double _maxEv = 0.0;
+  double _evStep = 0.0;
   FlashMode _flashMode = FlashMode.off;
   bool _isRecording = false;
   bool _busy = false;
@@ -137,6 +142,16 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   /// 프리뷰가 눈에 띄게 확대되는 기기에서만 줌 바를 노출한다(1.15배 이상).
   bool get canZoom => _maxZoom > _minZoom + 0.15;
 
+  /// 노출 보정(EV). [exposureTick] 은 값 변경만 알리는 경량 채널.
+  double get exposureOffset => _ev;
+  double get minExposureOffset => _minEv;
+  double get maxExposureOffset => _maxEv;
+  double get exposureStep => _evStep;
+  Listenable get exposureTick => _evBus;
+
+  /// 노출 보정을 지원하는 기기에서만 슬라이더를 노출한다.
+  bool get canSetExposure => _maxEv - _minEv > 0.01;
+
   /// 초점·노출이 한 지점에 고정돼 있는지. 테이크마다 밝기가 튀지 않게 할 때 켠다.
   bool get aeAfLocked => _aeAfLocked;
 
@@ -156,6 +171,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
     _zoomBus.dispose();
+    _evBus.dispose();
     super.dispose();
   }
 
@@ -310,6 +326,21 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
       // 플랫폼 인터페이스 미구현(테스트 페이크 등)
       _resetZoom();
     }
+    // 노출 보정 범위를 읽고 0(보정 없음)으로 초기화한다.
+    _resetExposure();
+    try {
+      final lo = await controller.getMinExposureOffset();
+      final hi = await controller.getMaxExposureOffset();
+      final step = await controller.getExposureOffsetStepSize();
+      _minEv = lo;
+      _maxEv = hi;
+      _evStep = step < 0 ? 0.0 : step;
+    } on Exception catch (e) {
+      debugPrint('노출 보정 범위 조회 실패: $e');
+      _resetExposure();
+    } on UnimplementedError {
+      _resetExposure();
+    }
     await previous?.dispose();
     _notify();
   }
@@ -318,6 +349,13 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     _zoom = 1.0;
     _minZoom = 1.0;
     _maxZoom = 1.0;
+  }
+
+  void _resetExposure() {
+    _ev = 0.0;
+    _minEv = 0.0;
+    _maxEv = 0.0;
+    _evStep = 0.0;
   }
 
   /// 전면 ↔ 후면 전환. 후면으로 돌아올 땐 마지막에 쓰던 렌즈로.
@@ -375,6 +413,51 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
       debugPrint('줌 설정 실패: $e');
       _zoom = prev; // 실제로 안 걸렸으면 UI도 되돌린다
       if (!_disposed) _zoomBus.ping();
+    }
+  }
+
+  double? _pendingEv;
+  bool _applyingEv = false;
+
+  /// 노출 보정(EV)을 설정한다(min~max 로 클램프, 기기 스텝으로 스냅).
+  /// 슬라이더 드래그 중 매 프레임 호출돼도 마지막 값만 적용되도록 합친다
+  /// (Android 는 이전 setExposureOffset 을 취소하고 예외를 던지므로).
+  Future<void> setExposureOffset(double value) async {
+    final c = _controller;
+    if (_disposed || c == null || !c.value.isInitialized) return;
+    var target = value.clamp(_minEv, _maxEv).toDouble();
+    if (_evStep > 0) {
+      target = (target / _evStep).roundToDouble() * _evStep;
+      target = target.clamp(_minEv, _maxEv).toDouble();
+    }
+    if ((target - _ev).abs() < 0.001) return;
+    _ev = target;
+    _evBus.ping();
+
+    _pendingEv = target;
+    if (_applyingEv) return; // 적용 루프가 이미 돌고 있으면 값만 갱신해 둔다
+    _applyingEv = true;
+    try {
+      while (_pendingEv != null && !_disposed) {
+        final want = _pendingEv!;
+        _pendingEv = null;
+        final cc = _controller;
+        if (cc == null || !cc.value.isInitialized) break;
+        try {
+          final applied = await cc.setExposureOffset(want);
+          // 드래그가 멈춘 뒤에만 기기가 실제 적용한 값으로 보정(중간엔 튀지 않게).
+          if (_pendingEv == null &&
+              !_disposed &&
+              (applied - _ev).abs() > 0.001) {
+            _ev = applied;
+            _evBus.ping();
+          }
+        } on CameraException catch (e) {
+          debugPrint('노출 보정 실패: $e');
+        }
+      }
+    } finally {
+      _applyingEv = false;
     }
   }
 

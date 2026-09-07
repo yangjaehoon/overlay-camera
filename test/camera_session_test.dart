@@ -277,6 +277,29 @@ void main() {
     });
   });
 
+  group('노출 보정', () {
+    test('컨트롤러 없으면 EV 기본치(0, 비활성)', () {
+      final session = CameraSession(workDir: WorkDir());
+      expect(session.exposureOffset, 0.0);
+      expect(session.minExposureOffset, 0.0);
+      expect(session.maxExposureOffset, 0.0);
+      expect(session.canSetExposure, false);
+      session.dispose();
+    });
+
+    test('카메라가 준비 안 됐으면 setExposureOffset 은 조용히 무시된다', () async {
+      final session = CameraSession(workDir: WorkDir());
+      var notified = 0;
+      session.addListener(() => notified++);
+
+      await session.setExposureOffset(1.5);
+
+      expect(session.exposureOffset, 0.0);
+      expect(notified, 0);
+      session.dispose();
+    });
+  });
+
   group('bootstrap', () {
     test('권한 거부 시 안내 메시지 설정', () async {
       mockPermissions(granted: false);

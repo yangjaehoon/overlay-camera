@@ -434,6 +434,87 @@ class _ZoomChip extends StatelessWidget {
   }
 }
 
+/// 노출 보정 값 라벨. 0 은 "0", 양수는 "+1.0", 음수는 "-1.3".
+String evLabel(double v) {
+  if (v.abs() < 0.05) return '0';
+  final s = v.toStringAsFixed(1);
+  return v > 0 ? '+$s' : s;
+}
+
+/// 좌측 세로 노출 보정(EV) 슬라이더. 우측 오버레이 패널과 대칭.
+/// 노출 보정을 지원하지 않는 기기에서는 그리지 않는다.
+class ExposureBar extends StatelessWidget {
+  const ExposureBar({super.key, required this.session, required this.metrics});
+
+  final CameraSession session;
+  final Metrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!session.isReady || !session.canSetExposure) {
+      return const SizedBox.shrink();
+    }
+    final m = metrics;
+    final maxPanelH = m.size.height - m.padding.vertical - m.sp(300);
+    final sliderLen =
+        maxPanelH.clamp(96.0, m.isTablet ? 360.0 : 220.0).toDouble();
+    final lo = session.minExposureOffset;
+    final hi = session.maxExposureOffset;
+    final value = session.exposureOffset.clamp(lo, hi).toDouble();
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          margin: EdgeInsets.only(left: m.sp(6)),
+          padding: EdgeInsets.symmetric(vertical: m.sp(12), horizontal: m.sp(2)),
+          decoration: BoxDecoration(
+            color: Colors.black54,
+            borderRadius: BorderRadius.circular(m.sp(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.wb_sunny_outlined,
+                color: Colors.white,
+                size: m.spc(18, 16.0, 26.0),
+              ),
+              SizedBox(
+                width: m.spc(40, 36.0, 52.0),
+                height: sliderLen,
+                child: RotatedBox(
+                  quarterTurns: 3,
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 3,
+                      overlayShape:
+                          const RoundSliderOverlayShape(overlayRadius: 14),
+                    ),
+                    child: Slider(
+                      value: value,
+                      min: lo,
+                      max: hi,
+                      onChanged: (v) =>
+                          unawaited(session.setExposureOffset(v)),
+                    ),
+                  ),
+                ),
+              ),
+              Text(
+                evLabel(session.exposureOffset),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: m.spc(12, 11.0, 16.0),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 색 반전(네거티브) ColorFilter. RGB를 뒤집는다.
 const ColorFilter _invertColorFilter = ColorFilter.matrix(<double>[
   -1, 0, 0, 0, 255, //

@@ -62,4 +62,22 @@ void main() {
       expect(zoomLabel(0.6), '0.6×');
     });
   });
+
+  group('evLabel', () {
+    test('0 근처는 "0"', () {
+      expect(evLabel(0.0), '0');
+      expect(evLabel(0.03), '0');
+      expect(evLabel(-0.02), '0');
+    });
+
+    test('양수는 + 접두사', () {
+      expect(evLabel(1.0), '+1.0');
+      expect(evLabel(0.7), '+0.7');
+    });
+
+    test('음수는 - 부호 그대로', () {
+      expect(evLabel(-1.0), '-1.0');
+      expect(evLabel(-1.33), '-1.3');
+    });
+  });
 }

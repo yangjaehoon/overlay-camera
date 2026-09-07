@@ -336,6 +336,11 @@ class _CameraScreenState extends State<CameraScreen> {
           listenable: Listenable.merge([_session, _session.zoomTick]),
           builder: (_, _) => ZoomBar(session: _session, metrics: m),
         ),
+        ListenableBuilder(
+          // _session: 준비 상태·EV 범위 변화 / exposureTick: 드래그 중 값 변화(경량).
+          listenable: Listenable.merge([_session, _session.exposureTick]),
+          builder: (_, _) => ExposureBar(session: _session, metrics: m),
+        ),
         // 도형 조작 컨트롤 + 편집 완료 버튼은 HUD 패널에 가리지 않도록 최상단에서 그린다.
         // 컨트롤은 도형 드래그마다 갱신돼야 하므로 전체 알림(_shapeGuide)에 구독.
         ListenableBuilder(

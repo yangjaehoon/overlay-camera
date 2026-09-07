@@ -21,6 +21,7 @@ void main() {
     expect(s.overlayOutline, false);
     expect(s.overlayMirror, false);
     expect(s.overlayInvert, false);
+    expect(s.levelEnabled, false);
     expect(s.shapeGuides, isEmpty);
     expect(s.shapeGuidePresets, isEmpty);
     expect(s.timerSeconds, 0);
@@ -48,6 +49,7 @@ void main() {
     s.setOverlayOutline(true);
     s.setOverlayMirror(true);
     s.setOverlayInvert(true);
+    s.setLevelEnabled(true);
     s.setTimerSeconds(10);
     s.setResolutionPreset(ResolutionPreset.veryHigh);
     s.setShapeGuides(const [
@@ -85,6 +87,7 @@ void main() {
     expect(again.overlayOutline, true);
     expect(again.overlayMirror, true);
     expect(again.overlayInvert, true);
+    expect(again.levelEnabled, true);
     expect(again.timerSeconds, 10);
     expect(again.resolutionPreset, ResolutionPreset.veryHigh);
     expect(again.shapeGuides.single.id, 's1');

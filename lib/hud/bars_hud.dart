@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../camera_session.dart';
 import '../camera_widgets.dart';
 import '../grid_controller.dart';
+import '../level_controller.dart';
 import '../location_stamp_controller.dart';
 import '../overlay_controller.dart';
 import '../shape_guide_controller.dart';
@@ -98,6 +99,7 @@ class TopBar extends StatelessWidget {
     required this.stamp,
     required this.overlay,
     required this.grid,
+    required this.level,
     required this.shapeGuide,
     required this.metrics,
     required this.onOpenGridSettings,
@@ -109,6 +111,7 @@ class TopBar extends StatelessWidget {
   final LocationStampController stamp;
   final OverlayController overlay;
   final GridController grid;
+  final LevelController level;
   final ShapeGuideController shapeGuide;
   final Metrics metrics;
   final VoidCallback onOpenGridSettings;
@@ -183,15 +186,18 @@ class TopBar extends StatelessWidget {
                   tooltip: '촬영 화질',
                   onTap: onOpenQualitySettings,
                 ),
-                BarButton(
-                  icon: grid.type.icon,
-                  color: grid.type == GridType.none
-                      ? Colors.white
-                      : Colors.amber,
-                  size: btn,
-                  iconSize: icon,
-                  tooltip: '그리드 설정',
-                  onTap: onOpenGridSettings,
+                ListenableBuilder(
+                  listenable: level,
+                  builder: (_, _) => BarButton(
+                    icon: grid.type.icon,
+                    color: grid.type == GridType.none && !level.enabled
+                        ? Colors.white
+                        : Colors.amber,
+                    size: btn,
+                    iconSize: icon,
+                    tooltip: '그리드 · 수평계',
+                    onTap: onOpenGridSettings,
+                  ),
                 ),
                 // 색만 isEmpty 에 의존하므로 구조 변경 채널만 구독한다
                 // (도형 드래그 중 잦은 리빌드 방지).

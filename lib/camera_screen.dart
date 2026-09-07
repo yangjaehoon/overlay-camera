@@ -12,6 +12,7 @@ import 'camera_session.dart';
 import 'camera_widgets.dart';
 import 'gallery_store.dart';
 import 'grid_controller.dart';
+import 'level_controller.dart';
 import 'location_stamp_controller.dart';
 import 'overlay_controller.dart';
 import 'settings_store.dart';
@@ -42,6 +43,7 @@ class _CameraScreenState extends State<CameraScreen> {
   late final LocationStampController _stamp;
   late final OverlayController _overlay;
   late final GridController _grid;
+  late final LevelController _level;
   late final ShapeGuideController _shapeGuide;
   late final GalleryStore _gallery;
   late final VolumeButton _volumeButton;
@@ -55,6 +57,7 @@ class _CameraScreenState extends State<CameraScreen> {
     _stamp = LocationStampController(onMessage: _toast);
     _overlay = OverlayController(workDir: _workDir, onMessage: _toast);
     _grid = GridController();
+    _level = LevelController()..attach();
     _shapeGuide = ShapeGuideController(onMessage: _toast);
     _gallery = GalleryStore(onMessage: _toast);
     // 볼륨 버튼 = 셔터. 카메라가 준비됐을 때만 볼륨 키를 가로챈다(Android).
@@ -71,6 +74,7 @@ class _CameraScreenState extends State<CameraScreen> {
     _stamp.dispose();
     _overlay.dispose();
     _grid.dispose();
+    _level.dispose();
     _shapeGuide.dispose();
     super.dispose();
   }
@@ -89,6 +93,7 @@ class _CameraScreenState extends State<CameraScreen> {
         _stamp.hydrate(s);
         _overlay.hydrate(s);
         _grid.hydrate(s);
+        _level.hydrate(s);
         _shapeGuide.hydrate(s);
       } on Exception catch (e) {
         debugPrint('설정 로드 실패: $e');
@@ -208,7 +213,7 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   void _openGridSettings() {
-    unawaited(showGridSettingsSheet(context, _grid));
+    unawaited(showGridSettingsSheet(context, _grid, _level));
   }
 
   void _openShapeGuideSettings() {
@@ -282,6 +287,10 @@ class _CameraScreenState extends State<CameraScreen> {
           builder: (_, _) => GridOverlay(type: _grid.type),
         ),
         ListenableBuilder(
+          listenable: _level,
+          builder: (_, _) => LevelIndicator(level: _level),
+        ),
+        ListenableBuilder(
           listenable: _shapeGuide,
           builder: (_, _) => ShapeGuideLayer(guide: _shapeGuide, metrics: m),
         ),
@@ -309,6 +318,7 @@ class _CameraScreenState extends State<CameraScreen> {
             stamp: _stamp,
             overlay: _overlay,
             grid: _grid,
+            level: _level,
             shapeGuide: _shapeGuide,
             onOpenGridSettings: _openGridSettings,
             onOpenShapeGuideSettings: _openShapeGuideSettings,

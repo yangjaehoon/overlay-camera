@@ -45,6 +45,7 @@ dependencies:
   geocoding: ^5.0.0
   image: ^4.9.2
   shared_preferences: ^2.5.5
+  sensors_plus: ^7.1.0
 
 dev_dependencies:
   flutter_test:

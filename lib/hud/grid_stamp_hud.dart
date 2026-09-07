@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../camera_widgets.dart';
 import '../grid_controller.dart';
+import '../level_controller.dart';
 import '../location_stamp_controller.dart';
 import '../photo_stamp.dart';
 import '../ui_metrics.dart';
@@ -29,22 +30,27 @@ class GridOverlay extends StatelessWidget {
   }
 }
 
-/// 그리드 상세 설정 바텀시트를 띄운다.
-Future<void> showGridSettingsSheet(BuildContext context, GridController grid) {
+/// 그리드·수평계 설정 바텀시트를 띄운다.
+Future<void> showGridSettingsSheet(
+  BuildContext context,
+  GridController grid,
+  LevelController level,
+) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: const Color(0xFF1C1C1E),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (sheetContext) => _GridSettingsSheet(grid: grid),
+    builder: (sheetContext) => _GridSettingsSheet(grid: grid, level: level),
   );
 }
 
 class _GridSettingsSheet extends StatelessWidget {
-  const _GridSettingsSheet({required this.grid});
+  const _GridSettingsSheet({required this.grid, required this.level});
 
   final GridController grid;
+  final LevelController level;
 
   @override
   Widget build(BuildContext context) {
@@ -87,6 +93,29 @@ class _GridSettingsSheet extends StatelessWidget {
                   onTap: () => grid.select(type),
                 ),
               ),
+            const Divider(color: Colors.white12, height: 20),
+            ListenableBuilder(
+              listenable: level,
+              builder: (context, _) => SwitchListTile(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 20),
+                value: level.enabled,
+                onChanged: (_) => level.toggle(),
+                activeThumbColor: Colors.amber,
+                secondary: Icon(
+                  Icons.straighten,
+                  color: level.enabled ? Colors.amber : Colors.white70,
+                ),
+                title: const Text(
+                  '수평 보조선',
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: const Text(
+                  '화면 가운데 수평선. 기울면 흰색, 수평이면 노란 한 줄.',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ),
+            ),
           ],
         ),
       ),

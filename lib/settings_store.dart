@@ -31,6 +31,7 @@ class SettingsStore {
   static const _kShapePresets = 'shapeGuidePresets';
   static const _kTimer = 'timerSeconds';
   static const _kResolution = 'resolutionPreset';
+  static const _kLevel = 'levelEnabled';
 
   bool get silentShutter => _prefs.getBool(_kSilent) ?? false;
   void setSilentShutter(bool v) => _prefs.setBool(_kSilent, v);
@@ -85,6 +86,9 @@ class SettingsStore {
 
   bool get overlayOutline => _prefs.getBool(_kOutline) ?? false;
   void setOverlayOutline(bool v) => _prefs.setBool(_kOutline, v);
+
+  bool get levelEnabled => _prefs.getBool(_kLevel) ?? false;
+  void setLevelEnabled(bool v) => _prefs.setBool(_kLevel, v);
 
   bool get overlayMirror => _prefs.getBool(_kMirror) ?? false;
   void setOverlayMirror(bool v) => _prefs.setBool(_kMirror, v);

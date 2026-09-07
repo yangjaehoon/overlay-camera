@@ -84,7 +84,9 @@ class RoundButton extends StatelessWidget {
               height: size,
               child: Icon(
                 icon,
-                color: onPressed == null ? Colors.white24 : iconColor,
+                color: onPressed == null && onLongPress == null
+                    ? Colors.white24
+                    : iconColor,
                 size: iconSize,
               ),
             ),

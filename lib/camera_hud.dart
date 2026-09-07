@@ -317,12 +317,15 @@ String zoomLabel(double v) =>
 /// 줌 바에 띄울 프리셋 배율. 항상 1×(또는 초광각 min)과 max 를 포함하고,
 /// 범위가 넉넉하면 2× 를 넣는다.
 List<double> zoomPresets(double min, double max) {
+  double round1(double v) => double.parse(v.toStringAsFixed(1));
   final set = <double>{};
-  if (min < 0.95) set.add(double.parse(min.toStringAsFixed(1))); // 초광각
-  set.add(min < 1.05 ? 1.0 : double.parse(min.toStringAsFixed(1)));
+  if (min < 0.95) set.add(round1(min)); // 초광각
+  set.add(min < 1.05 ? 1.0 : round1(min));
   if (max > 2.3) set.add(2.0);
-  set.add(double.parse(max.toStringAsFixed(1)));
-  return set.where((v) => v >= min - 0.01 && v <= max + 0.01).toList()..sort();
+  set.add(round1(max));
+  // 끝점을 소수 1자리로 반올림하면 최대 0.05 밀린다. 허용오차를 그 절반이 아닌
+  // 반올림 폭(0.05)으로 잡아야 반올림된 min·max 프리셋이 필터에서 탈락하지 않는다.
+  return set.where((v) => v >= min - 0.05 && v <= max + 0.05).toList()..sort();
 }
 
 /// 하단 가운데 디지털 줌 바. 프리셋(1×/2×/최대 등) 칩 + 좌우 드래그로 미세 조절.

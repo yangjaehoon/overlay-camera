@@ -332,7 +332,8 @@ class _CameraScreenState extends State<CameraScreen> {
           ),
         ),
         ListenableBuilder(
-          listenable: _session,
+          // _session: 준비 상태·줌 범위 변화 / zoomTick: 드래그 중 배율 변화(경량).
+          listenable: Listenable.merge([_session, _session.zoomTick]),
           builder: (_, _) => ZoomBar(session: _session, metrics: m),
         ),
         // 도형 조작 컨트롤 + 편집 완료 버튼은 HUD 패널에 가리지 않도록 최상단에서 그린다.

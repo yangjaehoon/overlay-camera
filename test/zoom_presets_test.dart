@@ -19,6 +19,20 @@ void main() {
       expect(zoomPresets(1.0, 2.0), [1.0, 2.0]);
     });
 
+    test('끝점이 소수 1자리로 반올림돼 밀려도 최대 배율 칩이 살아있다', () {
+      // 8.06 -> "8.1", 7.96 -> "8.0", 10.06 -> "10.1" 로 반올림되며
+      // 예전 ±0.01 필터에서는 전부 탈락해 [1.0, 2.0] 만 남았다.
+      expect(zoomPresets(1.0, 8.06).last, closeTo(8.1, 0.001));
+      expect(zoomPresets(1.0, 7.96).last, closeTo(8.0, 0.001));
+      expect(zoomPresets(1.0, 10.06).last, closeTo(10.1, 0.001));
+      expect(zoomPresets(1.0, 8.06), contains(2.0));
+    });
+
+    test('초광각 min 이 애매하게 반올림돼도 초광각 칩이 살아있다', () {
+      // 0.94 -> "0.9"
+      expect(zoomPresets(0.94, 8.0).first, closeTo(0.9, 0.001));
+    });
+
     test('항상 오름차순이고 max 를 포함한다', () {
       final list = zoomPresets(0.6, 5.0);
       final sorted = [...list]..sort();

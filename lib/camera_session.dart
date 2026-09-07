@@ -20,6 +20,51 @@ const _flashOrder = [
 FlashMode nextFlashMode(FlashMode current) =>
     _flashOrder[(_flashOrder.indexOf(current) + 1) % _flashOrder.length];
 
+/// 전/후면 전환 시 이동할 카메라 인덱스.
+/// [toFront] 면 첫 전면 카메라, 아니면 [lastBackIndex](유효할 때) 또는 첫 후면 카메라.
+/// 대상이 없거나 현재와 같으면 -1.
+int pickFlipTarget(
+  List<CameraDescription> cameras,
+  int currentIndex, {
+  required int lastBackIndex,
+  required bool toFront,
+}) {
+  int next;
+  if (toFront) {
+    next = cameras.indexWhere(
+      (c) => c.lensDirection == CameraLensDirection.front,
+    );
+  } else {
+    final lastOk = lastBackIndex >= 0 &&
+        lastBackIndex < cameras.length &&
+        cameras[lastBackIndex].lensDirection == CameraLensDirection.back;
+    next = lastOk
+        ? lastBackIndex
+        : cameras.indexWhere(
+            (c) => c.lensDirection == CameraLensDirection.back,
+          );
+  }
+  return (next < 0 || next == currentIndex) ? -1 : next;
+}
+
+/// 후면 물리 렌즈 순환 시 다음 인덱스. 후면 렌즈가 2개 미만이거나
+/// [currentIndex] 가 후면이 아니면 -1.
+int nextBackLensIndex(List<CameraDescription> cameras, int currentIndex) {
+  final backs = [
+    for (var i = 0; i < cameras.length; i++)
+      if (cameras[i].lensDirection == CameraLensDirection.back) i,
+  ];
+  if (backs.length < 2) return -1;
+  final pos = backs.indexOf(currentIndex);
+  return pos < 0 ? -1 : backs[(pos + 1) % backs.length];
+}
+
+/// 줌 배율만 전달하는 경량 알림 채널. 드래그 중 매 프레임 호출되므로
+/// 전역 notifyListeners(하단바·상단바·프리뷰 리빌드)와 분리한다.
+class _ZoomBus extends ChangeNotifier {
+  void ping() => notifyListeners();
+}
+
 /// 카메라 컨트롤러의 생명주기와 촬영(사진·무음·동영상)을 담당한다.
 /// 상태 변경 시 [notifyListeners]로 알리고, 안내 메시지는 [onMessage]로 전달한다.
 class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
@@ -42,6 +87,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   CameraController? _controller;
   int _index = 0;
   int _lastBackIndex = 0; // 마지막으로 쓴 후면 렌즈(전환 후 복귀용)
+  final _ZoomBus _zoomBus = _ZoomBus();
   double _zoom = 1.0;
   double _minZoom = 1.0;
   double _maxZoom = 1.0;
@@ -82,11 +128,14 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   /// 후면에 물리 렌즈가 2개 이상이면 렌즈 순환이 가능하다(초광각·망원 등).
   bool get hasMultipleBackLenses => _backLensIndices.length >= 2;
 
-  /// 디지털 줌 상태.
+  /// 디지털 줌 상태. [zoomTick] 은 배율 변경만 알리는 경량 채널이다.
   double get zoom => _zoom;
   double get minZoom => _minZoom;
   double get maxZoom => _maxZoom;
-  bool get canZoom => _maxZoom > _minZoom + 0.01;
+  Listenable get zoomTick => _zoomBus;
+
+  /// 프리뷰가 눈에 띄게 확대되는 기기에서만 줌 바를 노출한다(1.15배 이상).
+  bool get canZoom => _maxZoom > _minZoom + 0.15;
 
   /// 초점·노출이 한 지점에 고정돼 있는지. 테이크마다 밝기가 튀지 않게 할 때 켠다.
   bool get aeAfLocked => _aeAfLocked;
@@ -106,6 +155,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     _stopCountdown();
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
+    _zoomBus.dispose();
     super.dispose();
   }
 
@@ -245,72 +295,86 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
       // 일부 기기는 플래시 미지원
     }
     // 새 컨트롤러의 줌 범위를 읽고 1배로 초기화한다.
-    _zoom = 1.0;
-    _minZoom = 1.0;
-    _maxZoom = 1.0;
+    _resetZoom();
     try {
-      _minZoom = await controller.getMinZoomLevel();
-      _maxZoom = await controller.getMaxZoomLevel();
-      _zoom = _minZoom;
-    } catch (_) {
-      // 줌을 지원하지 않거나 조회 불가한 기기 - 줌 비활성 상태로 둔다
-      _zoom = 1.0;
-      _minZoom = 1.0;
-      _maxZoom = 1.0;
+      final lo = await controller.getMinZoomLevel();
+      final hi = await controller.getMaxZoomLevel();
+      _minZoom = lo;
+      _maxZoom = hi;
+      _zoom = lo;
+    } on Exception catch (e) {
+      // CameraException(줌 미지원) / MissingPluginException 등
+      debugPrint('줌 범위 조회 실패: $e');
+      _resetZoom();
+    } on UnimplementedError {
+      // 플랫폼 인터페이스 미구현(테스트 페이크 등)
+      _resetZoom();
     }
     await previous?.dispose();
     _notify();
   }
 
+  void _resetZoom() {
+    _zoom = 1.0;
+    _minZoom = 1.0;
+    _maxZoom = 1.0;
+  }
+
   /// 전면 ↔ 후면 전환. 후면으로 돌아올 땐 마지막에 쓰던 렌즈로.
   Future<void> flip() async {
     if (_isRecording || _busy || !canFlip) return;
-    final goingBack =
-        _cameras[_index].lensDirection == CameraLensDirection.front;
-    int next;
-    if (goingBack) {
-      next = (_lastBackIndex < _cameras.length &&
-              _cameras[_lastBackIndex].lensDirection == CameraLensDirection.back)
-          ? _lastBackIndex
-          : _cameras.indexWhere(
-              (c) => c.lensDirection == CameraLensDirection.back);
-    } else {
-      next = _cameras.indexWhere(
-          (c) => c.lensDirection == CameraLensDirection.front);
+    final onFront = _cameras[_index].lensDirection == CameraLensDirection.front;
+    final next = pickFlipTarget(
+      _cameras,
+      _index,
+      lastBackIndex: _lastBackIndex,
+      toFront: !onFront,
+    );
+    if (next < 0) return;
+    await _switchTo(next);
+    if (_controller != null) {
+      settings?.setLensDirection(_cameras[_index].lensDirection);
     }
-    if (next < 0 || next == _index) return;
-    _index = next;
-    if (_cameras[_index].lensDirection == CameraLensDirection.back) {
-      _lastBackIndex = _index;
-    }
-    await _initCamera(_index);
-    settings?.setLensDirection(_cameras[_index].lensDirection);
   }
 
   /// 후면 물리 렌즈를 순환한다(초광각·기본·망원 등). 후면일 때만.
   Future<void> cycleBackLens() async {
     if (_isRecording || _busy) return;
-    final backs = _backLensIndices;
-    if (backs.length < 2) return;
-    if (_cameras[_index].lensDirection != CameraLensDirection.back) return;
-    final pos = backs.indexOf(_index);
-    _index = backs[(pos + 1) % backs.length];
-    _lastBackIndex = _index;
-    await _initCamera(_index);
+    final next = nextBackLensIndex(_cameras, _index);
+    if (next < 0) return;
+    await _switchTo(next);
+  }
+
+  /// 렌즈 전환 구간을 [_busy]로 직렬화한다. flip·cycleBackLens 가 겹쳐
+  /// _initCamera 가 동시에 도는 것을 막는다.
+  Future<void> _switchTo(int index) async {
+    _setBusy(true);
+    try {
+      _index = index;
+      if (_cameras[_index].lensDirection == CameraLensDirection.back) {
+        _lastBackIndex = _index;
+      }
+      await _initCamera(_index);
+    } finally {
+      _setBusy(false);
+    }
   }
 
   /// 디지털 줌 배율을 설정한다(min~max 로 클램프). 슬라이더/핀치 중 매 프레임 호출 가능.
   Future<void> setZoom(double level) async {
     final c = _controller;
-    if (c == null || !c.value.isInitialized) return;
+    if (_disposed || c == null || !c.value.isInitialized) return;
     final z = level.clamp(_minZoom, _maxZoom).toDouble();
     if ((z - _zoom).abs() < 0.001) return;
+    final prev = _zoom;
     _zoom = z;
-    _notify();
+    _zoomBus.ping();
     try {
       await c.setZoomLevel(z);
     } on CameraException catch (e) {
       debugPrint('줌 설정 실패: $e');
+      _zoom = prev; // 실제로 안 걸렸으면 UI도 되돌린다
+      if (!_disposed) _zoomBus.ping();
     }
   }
 

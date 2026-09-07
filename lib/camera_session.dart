@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter/widgets.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:video_thumbnail/video_thumbnail.dart' as vt;
@@ -192,6 +193,15 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     if (_busy == value) return;
     _busy = value;
     _notify();
+  }
+
+  /// 촉각 피드백. 미지원 플랫폼·테스트 환경에서는 조용히 무시한다.
+  void _haptic(Future<void> Function() feedback) {
+    try {
+      feedback().catchError((Object _) {});
+    } catch (_) {
+      // 햅틱 미지원
+    }
   }
 
   /// 저장된 설정으로 초기 상태를 맞춘다. (플래시/무음/타이머)
@@ -420,6 +430,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
         _lastBackIndex = _index;
       }
       await _initCamera(_index);
+      if (_controller != null) _haptic(HapticFeedback.selectionClick);
     } finally {
       _setBusy(false);
     }
@@ -494,6 +505,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
       await _controller!.setFlashMode(next);
       _flashMode = next;
       settings?.setFlashMode(next);
+      _haptic(HapticFeedback.selectionClick);
       _notify();
     } on CameraException {
       onMessage?.call('이 기기에서는 플래시를 사용할 수 없습니다.');
@@ -503,6 +515,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   void toggleSilentShutter() {
     _silentShutter = !_silentShutter;
     settings?.setSilentShutter(_silentShutter);
+    _haptic(HapticFeedback.selectionClick);
     _notify();
   }
 
@@ -512,6 +525,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     final next = (_timerOrder.indexOf(_timerSeconds) + 1) % _timerOrder.length;
     _timerSeconds = _timerOrder[next];
     settings?.setTimerSeconds(_timerSeconds);
+    _haptic(HapticFeedback.selectionClick);
     _notify();
   }
 
@@ -535,6 +549,8 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
         _countdownTimer?.cancel();
         _countdownTimer = null;
         if (!done.isCompleted) done.complete(true);
+      } else {
+        _haptic(HapticFeedback.selectionClick); // 남은 초마다 똑딱
       }
     });
 
@@ -577,6 +593,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
           await c.setFocusMode(FocusMode.locked);
           await c.setExposureMode(ExposureMode.locked);
           _aeAfLocked = true;
+          _haptic(HapticFeedback.mediumImpact); // 고정됨을 확실히 알림
         } on Exception catch (e) {
           debugPrint('AE/AF 고정 실패, 자동으로 되돌림: $e');
           await _restoreAutoFocus(c);
@@ -622,6 +639,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   Future<File?> captureSnapshot() => _grabStill('overlay');
 
   Future<File?> _grabStill(String prefix) async {
+    _haptic(HapticFeedback.lightImpact); // 셔터 눌린 느낌
     try {
       if (_silentShutter) return await _grabSilentStill(prefix);
       final shot = await _controller!.takePicture();
@@ -691,12 +709,14 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
           onMessage?.call('동영상 저장에 실패했습니다.');
         } finally {
           _isRecording = false;
+          _haptic(HapticFeedback.mediumImpact);
           _notify();
         }
       } else {
         try {
           await _controller!.startVideoRecording();
           _isRecording = true;
+          _haptic(HapticFeedback.mediumImpact);
           _notify();
         } on CameraException catch (e) {
           debugPrint('녹화 시작 실패: $e');

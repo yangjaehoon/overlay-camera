@@ -59,6 +59,14 @@ int nextBackLensIndex(List<CameraDescription> cameras, int currentIndex) {
   return pos < 0 ? -1 : backs[(pos + 1) % backs.length];
 }
 
+/// 노출 보정 값을 [min]~[max] 로 클램프하고, [step]>0 이면 그 배수로 스냅한다.
+/// [step]<=0(연속 지원 기기)이면 클램프만 한다.
+double snapExposureOffset(double value, double min, double max, double step) {
+  final v = value.clamp(min, max).toDouble();
+  if (step <= 0) return v;
+  return ((v / step).roundToDouble() * step).clamp(min, max).toDouble();
+}
+
 /// 줌·노출처럼 드래그 중 매 프레임 바뀌는 값 전용 경량 알림 채널.
 /// 전역 notifyListeners(하단바·상단바·프리뷰 리빌드)와 분리한다.
 class _TickBus extends ChangeNotifier {
@@ -149,7 +157,8 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   double get exposureStep => _evStep;
   Listenable get exposureTick => _evBus;
 
-  /// 노출 보정을 지원하는 기기에서만 슬라이더를 노출한다.
+  /// 노출 보정 범위가 있는 기기에서만 슬라이더를 노출한다
+  /// (미지원 기기는 min==max==0 으로 보고됨).
   bool get canSetExposure => _maxEv - _minEv > 0.01;
 
   /// 초점·노출이 한 지점에 고정돼 있는지. 테이크마다 밝기가 튀지 않게 할 때 켠다.
@@ -305,19 +314,34 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
       await controller.dispose();
       return;
     }
+    // 플래시 적용 + 줌/노출 범위 조회는 서로 의존이 없다. 순차로 하면
+    // 렌즈 전환·앱 복귀마다 플랫폼 왕복 지연이 누적되므로 함께 실행한다.
+    // 각 헬퍼는 예외를 자체 처리하므로 이 Future.wait 는 실패하지 않는다.
+    await Future.wait([
+      _applyFlashMode(controller),
+      _loadZoomRange(controller),
+      _loadExposureRange(controller),
+    ]);
+    await previous?.dispose();
+    _notify();
+  }
+
+  Future<void> _applyFlashMode(CameraController c) async {
     try {
-      await controller.setFlashMode(_flashMode);
+      await c.setFlashMode(_flashMode);
     } on CameraException {
       // 일부 기기는 플래시 미지원
     }
-    // 새 컨트롤러의 줌 범위를 읽고 1배로 초기화한다.
+  }
+
+  /// 새 컨트롤러의 줌 범위를 읽고 1배로 초기화한다.
+  Future<void> _loadZoomRange(CameraController c) async {
     _resetZoom();
     try {
-      final lo = await controller.getMinZoomLevel();
-      final hi = await controller.getMaxZoomLevel();
-      _minZoom = lo;
-      _maxZoom = hi;
-      _zoom = lo;
+      final r = await Future.wait([c.getMinZoomLevel(), c.getMaxZoomLevel()]);
+      _minZoom = r[0];
+      _maxZoom = r[1];
+      _zoom = r[0];
     } on Exception catch (e) {
       // CameraException(줌 미지원) / MissingPluginException 등
       debugPrint('줌 범위 조회 실패: $e');
@@ -326,23 +350,26 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
       // 플랫폼 인터페이스 미구현(테스트 페이크 등)
       _resetZoom();
     }
-    // 노출 보정 범위를 읽고 0(보정 없음)으로 초기화한다.
+  }
+
+  /// 노출 보정 범위를 읽고 0(보정 없음)으로 초기화한다.
+  Future<void> _loadExposureRange(CameraController c) async {
     _resetExposure();
     try {
-      final lo = await controller.getMinExposureOffset();
-      final hi = await controller.getMaxExposureOffset();
-      final step = await controller.getExposureOffsetStepSize();
-      _minEv = lo;
-      _maxEv = hi;
-      _evStep = step < 0 ? 0.0 : step;
+      final r = await Future.wait([
+        c.getMinExposureOffset(),
+        c.getMaxExposureOffset(),
+        c.getExposureOffsetStepSize(),
+      ]);
+      _minEv = r[0];
+      _maxEv = r[1];
+      _evStep = r[2] < 0 ? 0.0 : r[2];
     } on Exception catch (e) {
       debugPrint('노출 보정 범위 조회 실패: $e');
       _resetExposure();
     } on UnimplementedError {
       _resetExposure();
     }
-    await previous?.dispose();
-    _notify();
   }
 
   void _resetZoom() {
@@ -422,14 +449,13 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   /// 노출 보정(EV)을 설정한다(min~max 로 클램프, 기기 스텝으로 스냅).
   /// 슬라이더 드래그 중 매 프레임 호출돼도 마지막 값만 적용되도록 합친다
   /// (Android 는 이전 setExposureOffset 을 취소하고 예외를 던지므로).
+  /// 참고: AE/AF 고정 중에는 기기에 따라 보정이 화면에 즉시 반영되지 않을 수 있다.
   Future<void> setExposureOffset(double value) async {
     final c = _controller;
-    if (_disposed || c == null || !c.value.isInitialized) return;
-    var target = value.clamp(_minEv, _maxEv).toDouble();
-    if (_evStep > 0) {
-      target = (target / _evStep).roundToDouble() * _evStep;
-      target = target.clamp(_minEv, _maxEv).toDouble();
+    if (_disposed || c == null || !c.value.isInitialized || !canSetExposure) {
+      return;
     }
+    final target = snapExposureOffset(value, _minEv, _maxEv, _evStep);
     if ((target - _ev).abs() < 0.001) return;
     _ev = target;
     _evBus.ping();

@@ -461,6 +461,11 @@ class ExposureBar extends StatelessWidget {
     final lo = session.minExposureOffset;
     final hi = session.maxExposureOffset;
     final value = session.exposureOffset.clamp(lo, hi).toDouble();
+    // 기기 스텝이 있으면 그 눈금으로 스냅되게 한다(연속 지원이거나
+    // 눈금이 너무 촘촘하면 그냥 연속 슬라이더로).
+    final step = session.exposureStep;
+    final rawDiv = step > 0 ? ((hi - lo) / step).round() : 0;
+    final divisions = (rawDiv >= 2 && rawDiv <= 60) ? rawDiv : null;
     return SafeArea(
       child: Align(
         alignment: Alignment.centerLeft,
@@ -494,6 +499,7 @@ class ExposureBar extends StatelessWidget {
                       value: value,
                       min: lo,
                       max: hi,
+                      divisions: divisions,
                       onChanged: (v) =>
                           unawaited(session.setExposureOffset(v)),
                     ),

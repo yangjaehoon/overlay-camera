@@ -102,6 +102,7 @@ class TopBar extends StatelessWidget {
     required this.metrics,
     required this.onOpenGridSettings,
     required this.onOpenShapeGuideSettings,
+    required this.onOpenQualitySettings,
   });
 
   final CameraSession session;
@@ -112,6 +113,7 @@ class TopBar extends StatelessWidget {
   final Metrics metrics;
   final VoidCallback onOpenGridSettings;
   final VoidCallback onOpenShapeGuideSettings;
+  final VoidCallback onOpenQualitySettings;
 
   @override
   Widget build(BuildContext context) {
@@ -172,6 +174,14 @@ class TopBar extends StatelessWidget {
                   iconSize: icon,
                   tooltip: '셀프타이머',
                   onTap: session.cycleTimer,
+                ),
+                BarButton(
+                  icon: Icons.hd_outlined,
+                  color: Colors.white,
+                  size: btn,
+                  iconSize: icon,
+                  tooltip: '촬영 화질',
+                  onTap: onOpenQualitySettings,
                 ),
                 BarButton(
                   icon: grid.type.icon,

@@ -30,6 +30,7 @@ class SettingsStore {
   static const _kShapes = 'shapeGuides';
   static const _kShapePresets = 'shapeGuidePresets';
   static const _kTimer = 'timerSeconds';
+  static const _kResolution = 'resolutionPreset';
 
   bool get silentShutter => _prefs.getBool(_kSilent) ?? false;
   void setSilentShutter(bool v) => _prefs.setBool(_kSilent, v);
@@ -76,6 +77,11 @@ class SettingsStore {
   GridType get gridType =>
       _enumByIndex(GridType.values, _prefs.getInt(_kGrid), GridType.thirds);
   void setGridType(GridType v) => _prefs.setInt(_kGrid, v.index);
+
+  ResolutionPreset get resolutionPreset => _enumByIndex(
+      ResolutionPreset.values, _prefs.getInt(_kResolution), ResolutionPreset.high);
+  void setResolutionPreset(ResolutionPreset v) =>
+      _prefs.setInt(_kResolution, v.index);
 
   bool get overlayOutline => _prefs.getBool(_kOutline) ?? false;
   void setOverlayOutline(bool v) => _prefs.setBool(_kOutline, v);

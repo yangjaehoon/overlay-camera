@@ -86,8 +86,8 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   SettingsStore? settings;
 
   /// 촬영 해상도. 사진·무음 캡처·영상 마지막 프레임 화질을 모두 결정한다.
-  /// (올리면 stampPhoto 메모리 사용량도 비례해 커진다)
-  static const _resolution = ResolutionPreset.high;
+  /// (올리면 stampPhoto 메모리 사용량도 비례해 커진다) hydrate 로 저장값이 주입된다.
+  ResolutionPreset _resolution = ResolutionPreset.high;
 
   /// 무음 촬영 시 몰래 녹화하는 길이. 첫 프레임만 뽑으므로 짧을수록 좋다.
   static const _silentClipDuration = Duration(milliseconds: 550);
@@ -128,6 +128,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   String? get statusMessage => _statusMessage;
   FlashMode get flashMode => _flashMode;
   bool get silentShutter => _silentShutter;
+  ResolutionPreset get resolutionPreset => _resolution;
 
   List<int> get _backLensIndices => [
         for (var i = 0; i < _cameras.length; i++)
@@ -204,11 +205,12 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// 저장된 설정으로 초기 상태를 맞춘다. (플래시/무음/타이머)
+  /// 저장된 설정으로 초기 상태를 맞춘다. (플래시/무음/타이머/해상도)
   void hydrate(SettingsStore s) {
     settings = s;
     _silentShutter = s.silentShutter;
     _timerSeconds = s.timerSeconds;
+    _resolution = s.resolutionPreset;
     // torch를 저장했다면 앱을 켜자마자 손전등이 켜지는 것을 막는다.
     _flashMode = s.flashMode == FlashMode.torch ? FlashMode.off : s.flashMode;
     _notify();
@@ -431,6 +433,23 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
       }
       await _initCamera(_index);
       if (_controller != null) _haptic(HapticFeedback.selectionClick);
+    } finally {
+      _setBusy(false);
+    }
+  }
+
+  /// 촬영 해상도를 바꾼다. 컨트롤러를 새 프리셋으로 다시 초기화한다.
+  /// 녹화 중이거나 다른 작업 중이면 무시.
+  Future<void> setResolutionPreset(ResolutionPreset preset) async {
+    if (_isRecording || _busy || _bootstrapping) return;
+    if (preset == _resolution) return;
+    _resolution = preset;
+    settings?.setResolutionPreset(preset);
+    _notify(); // 시트가 선택 표시를 즉시 갱신
+    if (_cameras.isEmpty) return; // 아직 부트스트랩 전이면 다음 _initCamera 가 반영
+    _setBusy(true);
+    try {
+      await _initCamera(_index);
     } finally {
       _setBusy(false);
     }

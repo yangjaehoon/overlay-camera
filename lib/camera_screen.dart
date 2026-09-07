@@ -215,6 +215,10 @@ class _CameraScreenState extends State<CameraScreen> {
     unawaited(showShapeGuideSheet(context, _shapeGuide));
   }
 
+  void _openQualitySettings() {
+    unawaited(showResolutionSheet(context, _session));
+  }
+
   void _toast(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -308,6 +312,7 @@ class _CameraScreenState extends State<CameraScreen> {
             shapeGuide: _shapeGuide,
             onOpenGridSettings: _openGridSettings,
             onOpenShapeGuideSettings: _openShapeGuideSettings,
+            onOpenQualitySettings: _openQualitySettings,
             metrics: m,
           ),
         ),

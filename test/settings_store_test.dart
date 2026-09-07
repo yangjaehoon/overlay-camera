@@ -24,6 +24,7 @@ void main() {
     expect(s.shapeGuides, isEmpty);
     expect(s.shapeGuidePresets, isEmpty);
     expect(s.timerSeconds, 0);
+    expect(s.resolutionPreset, ResolutionPreset.high);
   });
 
   test('timerSeconds 는 3·10만 유효하고 그 외는 0', () async {
@@ -48,6 +49,7 @@ void main() {
     s.setOverlayMirror(true);
     s.setOverlayInvert(true);
     s.setTimerSeconds(10);
+    s.setResolutionPreset(ResolutionPreset.veryHigh);
     s.setShapeGuides(const [
       ShapeGuide(
         id: 's1',
@@ -84,6 +86,7 @@ void main() {
     expect(again.overlayMirror, true);
     expect(again.overlayInvert, true);
     expect(again.timerSeconds, 10);
+    expect(again.resolutionPreset, ResolutionPreset.veryHigh);
     expect(again.shapeGuides.single.id, 's1');
     expect(again.shapeGuides.single.type, ShapeGuideType.circle);
     expect(again.shapeGuides.single.cx, 0.3);
@@ -98,11 +101,13 @@ void main() {
       'flashMode': -1,
       'lensDirection': 'nonsense',
       'gridType': 42,
+      'resolutionPreset': 999,
     });
     final s = await SettingsStore.load();
     expect(s.stampCorner, StampCorner.bottomRight);
     expect(s.flashMode, FlashMode.off);
     expect(s.lensDirection, CameraLensDirection.back);
     expect(s.gridType, GridType.thirds);
+    expect(s.resolutionPreset, ResolutionPreset.high);
   });
 }

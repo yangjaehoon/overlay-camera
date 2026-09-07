@@ -86,6 +86,48 @@ void main() {
       expect(session.flashMode, FlashMode.auto);
       session.dispose();
     });
+
+    test('저장된 해상도 프리셋을 복원한다', () async {
+      final store = await SettingsStore.load();
+      store.setResolutionPreset(ResolutionPreset.veryHigh);
+
+      final session = CameraSession(workDir: WorkDir())
+        ..hydrate(await SettingsStore.load());
+      expect(session.resolutionPreset, ResolutionPreset.veryHigh);
+      session.dispose();
+    });
+  });
+
+  group('setResolutionPreset', () {
+    test('기본값은 high', () {
+      final session = CameraSession(workDir: WorkDir());
+      expect(session.resolutionPreset, ResolutionPreset.high);
+      session.dispose();
+    });
+
+    test('카메라 없을 때도 값·알림은 반영된다', () async {
+      final session = CameraSession(workDir: WorkDir())
+        ..settings = await SettingsStore.load();
+      var notified = 0;
+      session.addListener(() => notified++);
+
+      await session.setResolutionPreset(ResolutionPreset.max);
+
+      expect(session.resolutionPreset, ResolutionPreset.max);
+      expect(notified, 1);
+      session.dispose();
+    });
+
+    test('같은 프리셋이면 아무 것도 안 한다', () async {
+      final session = CameraSession(workDir: WorkDir());
+      var notified = 0;
+      session.addListener(() => notified++);
+
+      await session.setResolutionPreset(ResolutionPreset.high); // 기본과 동일
+
+      expect(notified, 0);
+      session.dispose();
+    });
   });
 
   test('toggleSilentShutter는 값을 뒤집고 한 번 알린다', () async {

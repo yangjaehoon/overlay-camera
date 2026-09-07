@@ -51,6 +51,7 @@ class RoundButton extends StatelessWidget {
     required this.icon,
     required this.onPressed,
     required this.label,
+    this.onLongPress,
     this.big = false,
     this.iconColor = Colors.white,
     this.scale = 1.0,
@@ -58,6 +59,7 @@ class RoundButton extends StatelessWidget {
 
   final IconData icon;
   final VoidCallback? onPressed;
+  final VoidCallback? onLongPress;
   final String label;
   final bool big;
   final Color iconColor;
@@ -76,6 +78,7 @@ class RoundButton extends StatelessWidget {
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: onPressed,
+            onLongPress: onLongPress,
             child: SizedBox(
               width: size,
               height: size,

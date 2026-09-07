@@ -311,6 +311,126 @@ class CountdownOverlay extends StatelessWidget {
   }
 }
 
+String zoomLabel(double v) =>
+    v == v.roundToDouble() ? '${v.toInt()}×' : '${v.toStringAsFixed(1)}×';
+
+/// 줌 바에 띄울 프리셋 배율. 항상 1×(또는 초광각 min)과 max 를 포함하고,
+/// 범위가 넉넉하면 2× 를 넣는다.
+List<double> zoomPresets(double min, double max) {
+  final set = <double>{};
+  if (min < 0.95) set.add(double.parse(min.toStringAsFixed(1))); // 초광각
+  set.add(min < 1.05 ? 1.0 : double.parse(min.toStringAsFixed(1)));
+  if (max > 2.3) set.add(2.0);
+  set.add(double.parse(max.toStringAsFixed(1)));
+  return set.where((v) => v >= min - 0.01 && v <= max + 0.01).toList()..sort();
+}
+
+/// 하단 가운데 디지털 줌 바. 프리셋(1×/2×/최대 등) 칩 + 좌우 드래그로 미세 조절.
+/// 줌을 지원하지 않는 기기에서는 그리지 않는다.
+class ZoomBar extends StatelessWidget {
+  const ZoomBar({super.key, required this.session, required this.metrics});
+
+  final CameraSession session;
+  final Metrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!session.isReady || !session.canZoom) return const SizedBox.shrink();
+    final m = metrics;
+    final presets = zoomPresets(session.minZoom, session.maxZoom);
+    final z = session.zoom;
+    final active = presets.reduce(
+      (a, b) => (z - a).abs() <= (z - b).abs() ? a : b,
+    );
+    final span = session.maxZoom - session.minZoom;
+
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: m.spc(150, 128.0, 190.0)),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragUpdate: (d) => unawaited(
+              session.setZoom(z + d.delta.dx / 160 * span),
+            ),
+            child: Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: m.sp(6),
+                vertical: m.sp(4),
+              ),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(m.sp(22)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final p in presets)
+                    _ZoomChip(
+                      label: p == active ? zoomLabel(z) : zoomLabel(p),
+                      active: p == active,
+                      onTap: () => unawaited(session.setZoom(p)),
+                      metrics: m,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ZoomChip extends StatelessWidget {
+  const _ZoomChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+    required this.metrics,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final Metrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = metrics;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: m.sp(8),
+            vertical: m.sp(6),
+          ),
+          decoration: BoxDecoration(
+            color: active ? Colors.amber : Colors.transparent,
+            borderRadius: BorderRadius.circular(m.sp(20)),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: m.spc(34, 30.0, 46.0)),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: active ? Colors.black87 : Colors.white,
+                fontSize: m.spc(12, 11.0, 16.0),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 색 반전(네거티브) ColorFilter. RGB를 뒤집는다.
 const ColorFilter _invertColorFilter = ColorFilter.matrix(<double>[
   -1, 0, 0, 0, 255, //
@@ -1452,6 +1572,10 @@ class BottomBar extends StatelessWidget {
                   onPressed: busy || recording || !session.canFlip
                       ? null
                       : session.flip,
+                  // 길게 누르면 후면 물리 렌즈(초광각·망원 등) 순환.
+                  onLongPress: busy || recording || !session.hasMultipleBackLenses
+                      ? null
+                      : session.cycleBackLens,
                   label: '전환',
                   scale: m.scale,
                 ),

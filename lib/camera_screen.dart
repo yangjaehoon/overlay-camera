@@ -331,6 +331,10 @@ class _CameraScreenState extends State<CameraScreen> {
             onSnapshot: _snapshotToOverlay,
           ),
         ),
+        ListenableBuilder(
+          listenable: _session,
+          builder: (_, _) => ZoomBar(session: _session, metrics: m),
+        ),
         // 도형 조작 컨트롤 + 편집 완료 버튼은 HUD 패널에 가리지 않도록 최상단에서 그린다.
         // 컨트롤은 도형 드래그마다 갱신돼야 하므로 전체 알림(_shapeGuide)에 구독.
         ListenableBuilder(

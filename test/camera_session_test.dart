@@ -239,6 +239,44 @@ void main() {
     });
   });
 
+  group('줌 / 렌즈 전환', () {
+    test('컨트롤러 없으면 줌 관련 값은 기본치(1배, 비활성)', () {
+      final session = CameraSession(workDir: WorkDir());
+      expect(session.zoom, 1.0);
+      expect(session.minZoom, 1.0);
+      expect(session.maxZoom, 1.0);
+      expect(session.canZoom, false);
+      session.dispose();
+    });
+
+    test('카메라 목록이 비면 canFlip / hasMultipleBackLenses 는 false', () {
+      final session = CameraSession(workDir: WorkDir());
+      expect(session.canFlip, false);
+      expect(session.hasMultipleBackLenses, false);
+      session.dispose();
+    });
+
+    test('카메라가 준비 안 됐으면 setZoom 은 조용히 무시된다', () async {
+      final session = CameraSession(workDir: WorkDir());
+      var notified = 0;
+      session.addListener(() => notified++);
+
+      await session.setZoom(3.0);
+
+      expect(session.zoom, 1.0);
+      expect(notified, 0);
+      session.dispose();
+    });
+
+    test('전환 불가 상태에서 flip / cycleBackLens 는 예외 없이 무시된다', () async {
+      final session = CameraSession(workDir: WorkDir());
+      await session.flip();
+      await session.cycleBackLens();
+      expect(session.canFlip, false);
+      session.dispose();
+    });
+  });
+
   group('bootstrap', () {
     test('권한 거부 시 안내 메시지 설정', () async {
       mockPermissions(granted: false);

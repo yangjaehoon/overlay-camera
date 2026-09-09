@@ -9,6 +9,7 @@
 /// - level_hud: 화면 중앙 수평 보조선
 /// - quality_sheet: 촬영 화질(해상도) 선택 시트
 /// - shape_guide_hud: 도형 가이드 레이어/컨트롤/시트/프리셋
+/// - video_frame_sheet: 영상에서 오버레이용 프레임 스크럽 선택
 library;
 
 export 'hud/bars_hud.dart';
@@ -18,4 +19,5 @@ export 'hud/overlay_hud.dart';
 export 'hud/preview_focus_hud.dart';
 export 'hud/quality_sheet.dart';
 export 'hud/shape_guide_hud.dart';
+export 'hud/video_frame_sheet.dart';
 export 'hud/zoom_exposure_hud.dart';

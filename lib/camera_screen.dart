@@ -169,17 +169,27 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  Future<void> _setOverlayFromVideoLastFrame(String videoPath) async {
+  Future<void> _setOverlayFromVideoLastFrame(String videoPath) =>
+      _setOverlayFromVideoFrame(videoPath);
+
+  /// 영상에서 한 프레임을 뽑아 작업 폴더로 복사한 뒤 오버레이로 쓴다.
+  /// [timeMs]가 없으면 정지 직전(마지막) 프레임을 노린다.
+  Future<void> _setOverlayFromVideoFrame(
+    String videoPath, {
+    int? timeMs,
+  }) async {
     String? thumbPath;
     try {
-      final vp = VideoPlayerController.file(File(videoPath));
-      await vp.initialize();
-      final durationMs = vp.value.duration.inMilliseconds;
-      await vp.dispose();
-
-      // 정지 직전 프레임(끝에서 살짝 앞)을 노린다.
-      const endOffsetMs = 120;
-      final targetMs = durationMs > 200 ? durationMs - endOffsetMs : 0;
+      var targetMs = timeMs ?? 0;
+      if (timeMs == null) {
+        final vp = VideoPlayerController.file(File(videoPath));
+        await vp.initialize();
+        final durationMs = vp.value.duration.inMilliseconds;
+        await vp.dispose();
+        // 정지 직전 프레임(끝에서 살짝 앞)을 노린다.
+        const endOffsetMs = 120;
+        targetMs = durationMs > 200 ? durationMs - endOffsetMs : 0;
+      }
       thumbPath = await vt.VideoThumbnail.thumbnailFile(
         video: videoPath,
         imageFormat: vt.ImageFormat.PNG,
@@ -190,7 +200,8 @@ class _CameraScreenState extends State<CameraScreen> {
       final owned = await _workDir.copyInto(thumbPath, 'overlay', ext: 'png');
       _overlay.setFile(owned);
     } on Exception catch (e) {
-      debugPrint('마지막 프레임 추출 실패: $e');
+      debugPrint('프레임 추출 실패: $e');
+      _toast('영상에서 프레임을 뽑지 못했습니다.');
     } finally {
       if (thumbPath != null && thumbPath != _overlay.file?.path) {
         try {
@@ -202,14 +213,25 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _pickOverlayFromGallery() async {
+    XFile? picked;
     try {
-      final picked = await _picker.pickImage(source: ImageSource.gallery);
-      if (picked == null) return;
-      _overlay.setFile(File(picked.path));
+      picked = await _picker.pickMedia();
     } on Exception catch (e) {
-      debugPrint('오버레이 이미지 불러오기 실패: $e');
-      _toast('갤러리에서 이미지를 불러오지 못했습니다.');
+      debugPrint('갤러리 열기 실패: $e');
+      _toast('갤러리를 열지 못했습니다.');
+      return;
     }
+    if (picked == null || !mounted) return;
+
+    final isVideo = isVideoPath(picked.path) ||
+        (picked.mimeType?.startsWith('video/') ?? false);
+    if (!isVideo) {
+      _overlay.setFile(File(picked.path));
+      return;
+    }
+    final ms = await showVideoFrameSheet(context, picked.path);
+    if (ms == null || !mounted) return;
+    await _setOverlayFromVideoFrame(picked.path, timeMs: ms);
   }
 
   void _openGridSettings() {

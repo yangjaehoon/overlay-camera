@@ -15,7 +15,7 @@ bool isVideoPath(String path) {
   return _videoExts.contains(path.substring(dot).toLowerCase());
 }
 
-/// 밀리초를 m:ss(.d) 시계 표기로. 10분 미만이면 m:ss, 그 이상은 mm:ss.
+/// 밀리초를 m:ss 로. 초는 두 자리로 채운다(예: 65000 -> "1:05").
 String formatClock(int ms) {
   final totalSec = ms ~/ 1000;
   final m = totalSec ~/ 60;
@@ -54,6 +54,7 @@ class _VideoFrameSheetState extends State<_VideoFrameSheet> {
   String? _error;
   double _ms = 0;
   bool _scrubbing = false;
+  DateTime _lastSeek = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -83,11 +84,13 @@ class _VideoFrameSheetState extends State<_VideoFrameSheet> {
   void _onTick() {
     final c = _controller;
     if (c == null || _scrubbing || !mounted) return;
-    if (c.value.isPlaying) {
-      setState(
-        () => _ms = c.value.position.inMilliseconds.toDouble(),
-      );
-    }
+    // 재생 중이면 위치를 따라가고, 재생이 끝나면(정지 전환) 버튼 아이콘·썸을 갱신.
+    setState(() {
+      final v = c.value;
+      if (v.isPlaying || v.position >= v.duration) {
+        _ms = v.position.inMilliseconds.toDouble();
+      }
+    });
   }
 
   @override
@@ -97,8 +100,13 @@ class _VideoFrameSheetState extends State<_VideoFrameSheet> {
     super.dispose();
   }
 
-  Future<void> _seek(double ms) async {
+  /// 썸은 즉시 따라가되(드래그감), 실제 seek 은 스로틀한다(긴 클립 버벅임 방지).
+  /// 최종 프레임은 확정 시 [_ms] 로 뽑으므로 스로틀돼도 정확도에 영향 없다.
+  Future<void> _seek(double ms, {bool force = false}) async {
     setState(() => _ms = ms);
+    final now = DateTime.now();
+    if (!force && now.difference(_lastSeek).inMilliseconds < 80) return;
+    _lastSeek = now;
     await _controller?.seekTo(Duration(milliseconds: ms.round()));
   }
 
@@ -155,6 +163,7 @@ class _VideoFrameSheetState extends State<_VideoFrameSheet> {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 24),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(_error!, style: const TextStyle(color: Colors.white70)),
             const SizedBox(height: 16),
@@ -217,7 +226,10 @@ class _VideoFrameSheetState extends State<_VideoFrameSheet> {
                     if (c.value.isPlaying) unawaited(c.pause());
                   },
                   onChanged: (v) => unawaited(_seek(v)),
-                  onChangeEnd: (_) => _scrubbing = false,
+                  onChangeEnd: (v) {
+                    _scrubbing = false;
+                    unawaited(_seek(v, force: true));
+                  },
                 ),
               ),
             ),
@@ -238,6 +250,9 @@ class _VideoFrameSheetState extends State<_VideoFrameSheet> {
             ),
             const SizedBox(width: 8),
             Expanded(
+              // 반환한 ms 로 호출부가 VideoThumbnail 로 프레임을 뽑는다. 추출은
+              // 가장 가까운 키프레임으로 스냅될 수 있어 미리보기와 1~2프레임
+              // 차이가 날 수 있다(참조용 고스트라 허용).
               child: FilledButton.icon(
                 onPressed: () => Navigator.of(context).pop(value.round()),
                 icon: const Icon(Icons.center_focus_strong, size: 18),

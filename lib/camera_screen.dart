@@ -49,6 +49,7 @@ class _CameraScreenState extends State<CameraScreen> {
   late final VolumeButton _volumeButton;
 
   bool _settingsLoaded = false;
+  bool _pickingOverlay = false; // 갤러리 선택 + 프레임 추출 진행 중
 
   @override
   void initState() {
@@ -213,25 +214,46 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _pickOverlayFromGallery() async {
-    XFile? picked;
+    if (_pickingOverlay) return; // 추출 중 재진입 방지
+    _pickingOverlay = true;
     try {
-      picked = await _picker.pickMedia();
-    } on Exception catch (e) {
-      debugPrint('갤러리 열기 실패: $e');
-      _toast('갤러리를 열지 못했습니다.');
-      return;
-    }
-    if (picked == null || !mounted) return;
+      XFile? picked;
+      try {
+        picked = await _picker.pickMedia();
+      } on Exception catch (e) {
+        debugPrint('갤러리 열기 실패: $e');
+        _toast('갤러리를 열지 못했습니다.');
+        return;
+      }
+      if (picked == null || !mounted) return;
 
-    final isVideo = isVideoPath(picked.path) ||
-        (picked.mimeType?.startsWith('video/') ?? false);
-    if (!isVideo) {
-      _overlay.setFile(File(picked.path));
-      return;
+      final isVideo = isVideoPath(picked.path) ||
+          (picked.mimeType?.startsWith('video/') ?? false);
+      if (!isVideo) {
+        // 사진은 오버레이가 그 파일을 계속 참조하므로 지우지 않는다.
+        _overlay.setFile(File(picked.path));
+        return;
+      }
+
+      // 영상은 image_picker 가 앱 캐시로 복사한 사본이다. 프레임을 뽑고 나면
+      // (취소해도) 그 사본은 더 필요 없으므로 지운다.
+      final videoCopy = picked.path;
+      try {
+        final ms = await showVideoFrameSheet(context, videoCopy);
+        if (ms != null && mounted) {
+          await _setOverlayFromVideoFrame(videoCopy, timeMs: ms);
+        }
+      } finally {
+        unawaited(
+          File(videoCopy).delete().catchError((Object e) {
+            debugPrint('영상 사본 삭제 실패: $e');
+            return File(videoCopy);
+          }),
+        );
+      }
+    } finally {
+      _pickingOverlay = false;
     }
-    final ms = await showVideoFrameSheet(context, picked.path);
-    if (ms == null || !mounted) return;
-    await _setOverlayFromVideoFrame(picked.path, timeMs: ms);
   }
 
   void _openGridSettings() {

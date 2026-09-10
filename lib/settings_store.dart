@@ -2,6 +2,7 @@ import 'package:camera/camera.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'grid_controller.dart';
+import 'overlay_preset.dart';
 import 'photo_stamp.dart';
 import 'shape_guide.dart';
 
@@ -29,6 +30,7 @@ class SettingsStore {
   static const _kInvert = 'overlayInvert';
   static const _kShapes = 'shapeGuides';
   static const _kShapePresets = 'shapeGuidePresets';
+  static const _kOverlayPresets = 'overlayPresets';
   static const _kTimer = 'timerSeconds';
   static const _kResolution = 'resolutionPreset';
   static const _kLevel = 'levelEnabled';
@@ -105,6 +107,11 @@ class SettingsStore {
       decodeShapeGuidePresets(_prefs.getString(_kShapePresets));
   void setShapeGuidePresets(List<ShapeGuidePreset> presets) =>
       _prefs.setString(_kShapePresets, encodeShapeGuidePresets(presets));
+
+  List<OverlayPreset> get overlayPresets =>
+      decodeOverlayPresets(_prefs.getString(_kOverlayPresets));
+  void setOverlayPresets(List<OverlayPreset> presets) =>
+      _prefs.setString(_kOverlayPresets, encodeOverlayPresets(presets));
 
   static T _enumByIndex<T>(List<T> values, int? index, T fallback) =>
       (index != null && index >= 0 && index < values.length)

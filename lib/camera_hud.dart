@@ -7,6 +7,7 @@
 /// - overlay_hud: 고스트 오버레이 레이어 + 우측 컨트롤 패널
 /// - grid_stamp_hud: 정렬 그리드 + 촬영정보 스탬프 + 각 설정 UI
 /// - level_hud: 화면 중앙 수평 보조선
+/// - overlay_preset_sheet: 오버레이 프리셋 저장/불러오기 시트
 /// - quality_sheet: 촬영 화질(해상도) 선택 시트
 /// - shape_guide_hud: 도형 가이드 레이어/컨트롤/시트/프리셋
 /// - video_frame_sheet: 영상에서 오버레이용 프레임 스크럽 선택
@@ -16,6 +17,7 @@ export 'hud/bars_hud.dart';
 export 'hud/grid_stamp_hud.dart';
 export 'hud/level_hud.dart';
 export 'hud/overlay_hud.dart';
+export 'hud/overlay_preset_sheet.dart';
 export 'hud/preview_focus_hud.dart';
 export 'hud/quality_sheet.dart';
 export 'hud/shape_guide_hud.dart';

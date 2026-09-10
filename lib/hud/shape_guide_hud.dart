@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../shape_guide.dart';
 import '../shape_guide_controller.dart';
 import '../ui_metrics.dart';
+import 'name_dialog.dart';
 
 /// 화면 짧은 변 기준 도형 지름(px). 위젯 여러 곳에서 같은 공식을 쓰도록 분리.
 double shapeGuideDiameter(ShapeGuide s, Size screen) =>
@@ -498,7 +499,11 @@ class _ShapeGuideSheet extends StatelessWidget {
   final ShapeGuideController guide;
 
   Future<void> _saveCurrentAsPreset(BuildContext context) async {
-    final name = await _promptPresetName(context);
+    final name = await promptName(
+      context,
+      title: '배치 이름',
+      hint: '예: 인물용, 상품 정면',
+    );
     if (name == null) return;
     guide.savePreset(name);
   }
@@ -667,63 +672,6 @@ class _PresetTile extends StatelessWidget {
         onPressed: onDelete,
       ),
       onTap: onLoad,
-    );
-  }
-}
-
-/// 배치 이름을 입력받는다. 취소하거나 빈 이름이면 null.
-Future<String?> _promptPresetName(BuildContext context) async {
-  final result = await showDialog<String>(
-    context: context,
-    builder: (_) => const _PresetNameDialog(),
-  );
-  final trimmed = result?.trim() ?? '';
-  return trimmed.isEmpty ? null : trimmed;
-}
-
-/// 이름 입력 다이얼로그. TextEditingController 수명을 위젯이 직접 관리한다
-/// (다이얼로그 종료 애니메이션 중 컨트롤러를 dispose 하면 assert 로 죽는다).
-class _PresetNameDialog extends StatefulWidget {
-  const _PresetNameDialog();
-
-  @override
-  State<_PresetNameDialog> createState() => _PresetNameDialogState();
-}
-
-class _PresetNameDialogState extends State<_PresetNameDialog> {
-  final _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _submit() => Navigator.of(context).pop(_controller.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF2C2C2E),
-      title: const Text('배치 이름', style: TextStyle(color: Colors.white)),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        textInputAction: TextInputAction.done,
-        style: const TextStyle(color: Colors.white),
-        decoration: const InputDecoration(
-          hintText: '예: 인물용, 상품 정면',
-          hintStyle: TextStyle(color: Colors.white38),
-        ),
-        onSubmitted: (_) => _submit(),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('취소'),
-        ),
-        TextButton(onPressed: _submit, child: const Text('저장')),
-      ],
     );
   }
 }

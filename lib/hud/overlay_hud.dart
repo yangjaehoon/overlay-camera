@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../overlay_controller.dart';
 import '../ui_metrics.dart';
+import 'overlay_preset_sheet.dart';
 
 /// 색 반전(네거티브) ColorFilter. RGB를 뒤집는다.
 const ColorFilter _invertColorFilter = ColorFilter.matrix(<double>[
@@ -106,12 +109,12 @@ class RightControls extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = metrics;
     final toggleH = m.spc(32, 28.0, 40.0);
-    // 고정 요소(아이콘 + % + 토글 3개 + 간격 + 세로 패딩) 높이.
+    // 고정 요소(아이콘 + % + 토글 3개 + 프리셋 버튼 + 간격 + 세로 패딩) 높이.
     final fixedH = m.spc(18, 16.0, 26.0) +
         m.spc(12, 11.0, 16.0) +
         m.sp(10) +
-        toggleH * 3 +
-        m.sp(8) * 2 +
+        toggleH * 4 +
+        m.sp(8) * 3 +
         m.sp(24);
     // 상단 바·하단 바와 안 겹치도록 패널이 쓸 수 있는 세로 공간을 제한하고,
     // 그 안에서 남는 만큼만 슬라이더에 준다(작은 폰에서 아이콘이 잘리지 않게).
@@ -181,7 +184,46 @@ class RightControls extends StatelessWidget {
                 onTap: overlay.toggleInvert,
                 metrics: m,
               ),
+              SizedBox(height: m.sp(8)),
+              _PresetButton(
+                metrics: m,
+                onTap: () =>
+                    unawaited(showOverlayPresetSheet(context, overlay)),
+              ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 우측 패널 맨 아래 프리셋 저장/불러오기 버튼(토글 아님, 항상 활성).
+class _PresetButton extends StatelessWidget {
+  const _PresetButton({required this.metrics, required this.onTap});
+
+  final Metrics metrics;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = metrics;
+    final size = m.spc(32, 28.0, 40.0);
+    return Tooltip(
+      message: '오버레이 프리셋',
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Icon(
+              Icons.bookmarks_outlined,
+              size: m.spc(20, 18.0, 26.0),
+              color: Colors.white,
+            ),
           ),
         ),
       ),

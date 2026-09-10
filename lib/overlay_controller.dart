@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'overlay_outline.dart';
+import 'overlay_preset.dart';
 import 'settings_store.dart';
 import 'work_dir.dart';
 
@@ -24,6 +27,7 @@ class OverlayController extends ChangeNotifier {
 
   static const _minScale = 0.15;
   static const _maxScale = 6.0;
+  static const _maxPresets = 20;
 
   File? _file;
   double _opacity = 0.45;
@@ -52,6 +56,10 @@ class OverlayController extends ChangeNotifier {
   double _baseScale = 1.0;
   double _baseRotation = 0.0;
 
+  // 이름 붙여 저장한 오버레이 설정. 이미지는 앱 문서 폴더에 사본 보관.
+  List<OverlayPreset> _presets = const [];
+  static int _idSeq = 0;
+
   File? get file => _file;
   bool get hasFile => _file != null;
   double get opacity => _opacity;
@@ -64,6 +72,9 @@ class OverlayController extends ChangeNotifier {
   bool get tracingOutline => _tracingOutline;
   bool get mirrored => _mirrored;
   bool get inverted => _inverted;
+
+  UnmodifiableListView<OverlayPreset> get presets =>
+      UnmodifiableListView(_presets);
 
   /// 실제로 그릴 파일. 윤곽선 모드면 추출된 윤곽선을(처리 중이면 원본을 대신) 보여준다.
   File? get displayFile => _outlineMode ? (_outlineFile ?? _file) : _file;
@@ -95,6 +106,7 @@ class OverlayController extends ChangeNotifier {
     _outlineMode = s.overlayOutline;
     _mirrored = s.overlayMirror;
     _inverted = s.overlayInvert;
+    _presets = s.overlayPresets;
     _notifyStructural();
     if (_outlineMode) unawaited(_ensureOutline());
   }
@@ -220,5 +232,137 @@ class OverlayController extends ChangeNotifier {
     _rotation = _baseRotation + details.rotation;
     _offset += details.focalPointDelta;
     _notify();
+  }
+
+  // --- 프리셋 저장/불러오기 -------------------------------------------------
+
+  static String _newId() =>
+      '${DateTime.now().microsecondsSinceEpoch}_${_idSeq++}';
+
+  static String _extOf(String path) {
+    final dot = path.lastIndexOf('.');
+    if (dot < 0 || dot == path.length - 1) return 'png';
+    final ext = path.substring(dot + 1).toLowerCase();
+    return ext.length <= 5 ? ext : 'png';
+  }
+
+  Future<Directory> _presetDir() async {
+    final base = await getApplicationDocumentsDirectory();
+    final dir = Directory('${base.path}/overlay_presets');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    return dir;
+  }
+
+  void _persistPresets() => settings?.setOverlayPresets(_presets);
+
+  /// 현재 오버레이(이미지 + 위치·크기·회전·투명도·반전)를 [name]으로 저장한다.
+  /// 오버레이가 없으면 무시. 같은 이름이 있으면 덮어쓴다.
+  Future<void> savePreset(String name) async {
+    final src = _file;
+    final trimmed = name.trim();
+    if (src == null || trimmed.isEmpty) return;
+
+    final existing = _presets.indexWhere((p) => p.name == trimmed);
+    if (existing < 0 && _presets.length >= _maxPresets) {
+      onMessage?.call('저장된 프리셋은 최대 $_maxPresets개까지입니다.');
+      return;
+    }
+
+    try {
+      final dir = await _presetDir();
+      final id = existing >= 0 ? _presets[existing].id : _newId();
+      final dest = File('${dir.path}/$id.${_extOf(src.path)}');
+      if (existing >= 0 && _presets[existing].imagePath != dest.path) {
+        final oldImg = File(_presets[existing].imagePath);
+        if (await oldImg.exists()) await oldImg.delete();
+      }
+      await src.copy(dest.path);
+
+      final entry = OverlayPreset(
+        id: id,
+        name: trimmed,
+        imagePath: dest.path,
+        opacity: _opacity,
+        dx: _offset.dx,
+        dy: _offset.dy,
+        scale: _scale,
+        rotation: _rotation,
+        mirrored: _mirrored,
+        inverted: _inverted,
+      );
+      final next = [..._presets];
+      if (existing >= 0) {
+        next[existing] = entry;
+      } else {
+        next.add(entry);
+      }
+      _presets = next;
+      _persistPresets();
+      onMessage?.call(existing >= 0
+          ? '"$trimmed" 프리셋을 덮어썼습니다.'
+          : '"$trimmed" 프리셋을 저장했습니다.');
+      _notifyStructural();
+    } on Exception catch (e) {
+      debugPrint('오버레이 프리셋 저장 실패: $e');
+      onMessage?.call('프리셋을 저장하지 못했습니다.');
+    }
+  }
+
+  /// 저장된 프리셋을 통째로 불러온다. 이미지가 사라졌으면 그 프리셋을 정리한다.
+  Future<void> loadPreset(String id) async {
+    final preset = _presets.firstWhereOrNull((p) => p.id == id);
+    if (preset == null) return;
+
+    final img = File(preset.imagePath);
+    if (!await img.exists()) {
+      onMessage?.call('프리셋 이미지를 찾을 수 없습니다.');
+      await deletePreset(id);
+      return;
+    }
+
+    final old = _file;
+    final oldOutline = _outlineFile;
+    _file = img;
+    _outlineFile = null;
+    _offset = Offset(preset.dx, preset.dy);
+    _scale = preset.scale.clamp(_minScale, _maxScale).toDouble();
+    _rotation = preset.rotation;
+    _opacity = preset.opacity;
+    _mirrored = preset.mirrored;
+    _inverted = preset.inverted;
+    _locked = false;
+    settings?.setOverlayOpacity(_opacity);
+    settings?.setOverlayMirror(_mirrored);
+    settings?.setOverlayInvert(_inverted);
+    _notifyStructural();
+
+    if (old != null && old.path != img.path) workDir.deleteIfOwned(old);
+    if (oldOutline != null) workDir.deleteIfOwned(oldOutline);
+    if (_outlineMode) unawaited(_ensureOutline());
+    onMessage?.call('"${preset.name}" 프리셋을 불러왔습니다.');
+  }
+
+  Future<void> deletePreset(String id) async {
+    final idx = _presets.indexWhere((p) => p.id == id);
+    if (idx < 0) return;
+    final removed = _presets[idx];
+    _presets = [..._presets]..removeAt(idx);
+    _persistPresets();
+    _notifyStructural();
+    try {
+      final f = File(removed.imagePath);
+      if (await f.exists()) await f.delete();
+    } on Exception catch (_) {
+      // 파일 삭제 실패는 무시(다음 정리 때 사라짐)
+    }
+  }
+}
+
+extension _FirstWhereOrNull<E> on Iterable<E> {
+  E? firstWhereOrNull(bool Function(E) test) {
+    for (final e in this) {
+      if (test(e)) return e;
+    }
+    return null;
   }
 }

@@ -9,13 +9,16 @@ import 'package:image/image.dart' as img;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// WorkDir가 쓰는 임시 디렉터리를 테스트용 폴더로 고정하는 가짜 구현.
+/// WorkDir·프리셋 저장소가 쓰는 디렉터리를 테스트용 폴더로 고정하는 가짜 구현.
 class _FakePathProvider extends PathProviderPlatform {
   _FakePathProvider(this.path);
   final String path;
 
   @override
   Future<String?> getTemporaryPath() async => path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => path;
 }
 
 void main() {
@@ -219,5 +222,109 @@ void main() {
     expect(c.displayFile, isNot(c.file));
 
     c.dispose();
+  });
+
+  group('프리셋', () {
+    test('오버레이가 없으면 savePreset 은 무시된다', () async {
+      final c = OverlayController(workDir: WorkDir())
+        ..settings = await SettingsStore.load();
+      await c.savePreset('x');
+      expect(c.presets, isEmpty);
+      c.dispose();
+    });
+
+    test('저장하면 이미지 사본 + 현재 변형이 프리셋에 담긴다', () async {
+      final c = OverlayController(workDir: WorkDir())
+        ..settings = await SettingsStore.load();
+      c.setFile(makeRealImage());
+      c.onScaleUpdate(ScaleUpdateDetails(
+        scale: 1.5,
+        rotation: 0.3,
+        focalPointDelta: const Offset(7, -4),
+      ));
+      c.commitOpacity(0.7);
+      c.toggleMirror();
+
+      await c.savePreset('정면');
+
+      expect(c.presets, hasLength(1));
+      final p = c.presets.single;
+      expect(p.name, '정면');
+      expect(File(p.imagePath).existsSync(), true);
+      expect(p.imagePath, isNot(c.file!.path)); // 사본이다
+      expect(p.scale, closeTo(1.5, 1e-9));
+      expect(p.opacity, 0.7);
+      expect(p.mirrored, true);
+      c.dispose();
+    });
+
+    test('같은 이름으로 저장하면 덮어쓴다', () async {
+      final c = OverlayController(workDir: WorkDir())
+        ..settings = await SettingsStore.load();
+      c.setFile(makeRealImage());
+      await c.savePreset('A');
+      c.commitOpacity(0.9);
+      await c.savePreset('A');
+
+      expect(c.presets, hasLength(1));
+      expect(c.presets.single.opacity, 0.9);
+      c.dispose();
+    });
+
+    test('loadPreset 은 이미지·변형·투명도·반전을 복원한다', () async {
+      final c = OverlayController(workDir: WorkDir())
+        ..settings = await SettingsStore.load();
+      c.setFile(makeRealImage());
+      c.onScaleUpdate(ScaleUpdateDetails(
+        scale: 2.0,
+        focalPointDelta: const Offset(20, 10),
+      ));
+      c.commitOpacity(0.33);
+      c.toggleInvert();
+      await c.savePreset('B');
+      final presetPath = c.presets.single.imagePath;
+
+      // 상태를 흩뜨린 뒤 불러오기
+      c.setFile(makeRealImage());
+      c.resetTransform();
+      c.commitOpacity(0.45);
+      c.toggleInvert(); // 다시 끔
+
+      await c.loadPreset(c.presets.single.id);
+
+      expect(c.file!.path, presetPath);
+      expect(c.scale, closeTo(2.0, 1e-9));
+      expect(c.opacity, 0.33);
+      expect(c.inverted, true);
+      c.dispose();
+    });
+
+    test('deletePreset 은 목록과 이미지 파일을 지운다', () async {
+      final c = OverlayController(workDir: WorkDir())
+        ..settings = await SettingsStore.load();
+      c.setFile(makeRealImage());
+      await c.savePreset('C');
+      final path = c.presets.single.imagePath;
+      expect(File(path).existsSync(), true);
+
+      await c.deletePreset(c.presets.single.id);
+
+      expect(c.presets, isEmpty);
+      expect(File(path).existsSync(), false);
+      c.dispose();
+    });
+
+    test('hydrate 로 저장된 프리셋 목록을 복원한다', () async {
+      final store = await SettingsStore.load();
+      final c1 = OverlayController(workDir: WorkDir())..settings = store;
+      c1.setFile(makeRealImage());
+      await c1.savePreset('keep');
+      c1.dispose();
+
+      final c2 = OverlayController(workDir: WorkDir())
+        ..hydrate(await SettingsStore.load());
+      expect(c2.presets.map((p) => p.name), ['keep']);
+      c2.dispose();
+    });
   });
 }

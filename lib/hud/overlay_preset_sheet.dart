@@ -131,8 +131,13 @@ class _PresetTile extends StatelessWidget {
   final VoidCallback onLoad;
   final VoidCallback onDelete;
 
+  static const _thumbSize = 44.0;
+
   @override
   Widget build(BuildContext context) {
+    // 원본 해상도 그대로 디코드하지 않도록 화면 밀도에 맞는 픽셀 크기로 캐시한다.
+    // (갤러리 원본 사진을 저장한 프리셋이 많으면 안 그러면 메모리 부담이 크다.)
+    final px = (_thumbSize * MediaQuery.devicePixelRatioOf(context)).round();
     return ListTile(
       contentPadding: EdgeInsets.zero,
       dense: true,
@@ -140,13 +145,15 @@ class _PresetTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         child: Image.file(
           File(imagePath),
-          width: 44,
-          height: 44,
+          width: _thumbSize,
+          height: _thumbSize,
           fit: BoxFit.cover,
           gaplessPlayback: true,
+          cacheWidth: px,
+          cacheHeight: px,
           errorBuilder: (_, _, _) => Container(
-            width: 44,
-            height: 44,
+            width: _thumbSize,
+            height: _thumbSize,
             color: Colors.white12,
             child: const Icon(Icons.broken_image_outlined,
                 color: Colors.white38, size: 20),

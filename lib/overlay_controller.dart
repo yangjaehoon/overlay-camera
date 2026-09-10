@@ -109,6 +109,7 @@ class OverlayController extends ChangeNotifier {
     _presets = s.overlayPresets;
     _notifyStructural();
     if (_outlineMode) unawaited(_ensureOutline());
+    unawaited(_pruneOrphanPresetImages());
   }
 
   /// 오버레이 이미지를 교체한다. 이전 파일(+예전 윤곽선)이 작업 폴더 소유면 삭제한다.
@@ -272,11 +273,17 @@ class OverlayController extends ChangeNotifier {
       final dir = await _presetDir();
       final id = existing >= 0 ? _presets[existing].id : _newId();
       final dest = File('${dir.path}/$id.${_extOf(src.path)}');
-      if (existing >= 0 && _presets[existing].imagePath != dest.path) {
-        final oldImg = File(_presets[existing].imagePath);
-        if (await oldImg.exists()) await oldImg.delete();
-      }
+      final staleImg = existing >= 0 && _presets[existing].imagePath != dest.path
+          ? File(_presets[existing].imagePath)
+          : null;
+
+      // 먼저 새 이미지를 복사해 두고, 그게 성공한 뒤에만 옛 이미지(확장자가
+      // 바뀐 덮어쓰기 등으로 경로가 달라진 경우)를 지운다. 복사가 실패해도
+      // 기존 프리셋은 온전히 남아야 한다.
       await src.copy(dest.path);
+      if (staleImg != null && await staleImg.exists()) {
+        await staleImg.delete();
+      }
 
       final entry = OverlayPreset(
         id: id,
@@ -313,35 +320,41 @@ class OverlayController extends ChangeNotifier {
     final preset = _presets.firstWhereOrNull((p) => p.id == id);
     if (preset == null) return;
 
-    final img = File(preset.imagePath);
-    if (!await img.exists()) {
-      onMessage?.call('프리셋 이미지를 찾을 수 없습니다.');
-      await deletePreset(id);
-      return;
+    try {
+      final img = File(preset.imagePath);
+      if (!await img.exists()) {
+        onMessage?.call('프리셋 이미지를 찾을 수 없습니다.');
+        await deletePreset(id);
+        return;
+      }
+
+      final old = _file;
+      final oldOutline = _outlineFile;
+      _file = img;
+      _outlineFile = null;
+      _offset = Offset(preset.dx, preset.dy);
+      _scale = preset.scale.clamp(_minScale, _maxScale).toDouble();
+      _rotation = preset.rotation;
+      _opacity = preset.opacity;
+      _mirrored = preset.mirrored;
+      _inverted = preset.inverted;
+      _locked = false;
+      settings?.setOverlayOpacity(_opacity);
+      settings?.setOverlayMirror(_mirrored);
+      settings?.setOverlayInvert(_inverted);
+      _notifyStructural();
+
+      if (old != null && old.path != img.path) workDir.deleteIfOwned(old);
+      if (oldOutline != null) workDir.deleteIfOwned(oldOutline);
+      if (_outlineMode) unawaited(_ensureOutline());
+      onMessage?.call('"${preset.name}" 프리셋을 불러왔습니다.');
+    } on Exception catch (e) {
+      debugPrint('오버레이 프리셋 불러오기 실패: $e');
+      onMessage?.call('프리셋을 불러오지 못했습니다.');
     }
-
-    final old = _file;
-    final oldOutline = _outlineFile;
-    _file = img;
-    _outlineFile = null;
-    _offset = Offset(preset.dx, preset.dy);
-    _scale = preset.scale.clamp(_minScale, _maxScale).toDouble();
-    _rotation = preset.rotation;
-    _opacity = preset.opacity;
-    _mirrored = preset.mirrored;
-    _inverted = preset.inverted;
-    _locked = false;
-    settings?.setOverlayOpacity(_opacity);
-    settings?.setOverlayMirror(_mirrored);
-    settings?.setOverlayInvert(_inverted);
-    _notifyStructural();
-
-    if (old != null && old.path != img.path) workDir.deleteIfOwned(old);
-    if (oldOutline != null) workDir.deleteIfOwned(oldOutline);
-    if (_outlineMode) unawaited(_ensureOutline());
-    onMessage?.call('"${preset.name}" 프리셋을 불러왔습니다.');
   }
 
+  /// 프리셋을 목록·이미지 파일 모두에서 지운다.
   Future<void> deletePreset(String id) async {
     final idx = _presets.indexWhere((p) => p.id == id);
     if (idx < 0) return;
@@ -352,8 +365,30 @@ class OverlayController extends ChangeNotifier {
     try {
       final f = File(removed.imagePath);
       if (await f.exists()) await f.delete();
-    } on Exception catch (_) {
-      // 파일 삭제 실패는 무시(다음 정리 때 사라짐)
+    } on Exception catch (e) {
+      // 목록에서는 이미 지워졌으니 사용자에게는 알리지 않는다. 파일이 남아도
+      // _pruneOrphanPresetImages 가 다음 hydrate 때 정리한다.
+      debugPrint('프리셋 이미지 파일 삭제 실패: $e');
+    }
+  }
+
+  /// [_presetDir] 안에서 어떤 프리셋도 참조하지 않는 파일을 지운다.
+  /// (삭제 실패로 남은 파일, 저장 도중 죽어서 못 지운 파일 등) hydrate 때 한 번 돈다.
+  Future<void> _pruneOrphanPresetImages() async {
+    try {
+      final dir = await _presetDir();
+      final referenced = _presets.map((p) => p.imagePath).toSet();
+      await for (final entry in dir.list()) {
+        if (entry is File && !referenced.contains(entry.path)) {
+          try {
+            await entry.delete();
+          } catch (_) {
+            // 개별 삭제 실패는 무시(다음 hydrate 에 다시 시도)
+          }
+        }
+      }
+    } on Exception catch (e) {
+      debugPrint('프리셋 폴더 정리 실패: $e');
     }
   }
 }

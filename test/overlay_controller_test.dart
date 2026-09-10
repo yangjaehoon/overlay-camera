@@ -324,6 +324,72 @@ void main() {
       final c2 = OverlayController(workDir: WorkDir())
         ..hydrate(await SettingsStore.load());
       expect(c2.presets.map((p) => p.name), ['keep']);
+      // hydrate 가 백그라운드로 띄우는 고아 파일 정리가 tearDown 뒤로
+      // 새지 않도록 여기서 끝나길 기다린다.
+      await Future.delayed(const Duration(milliseconds: 200));
+      c2.dispose();
+    });
+
+    test('최대 개수를 넘으면 저장하지 않고 메시지를 보낸다', () async {
+      final messages = <String>[];
+      final c = OverlayController(workDir: WorkDir(), onMessage: messages.add)
+        ..settings = await SettingsStore.load();
+      for (var i = 0; i < 20; i++) {
+        c.setFile(makeRealImage());
+        await c.savePreset('p$i');
+      }
+      expect(c.presets, hasLength(20));
+
+      c.setFile(makeRealImage());
+      await c.savePreset('overflow');
+
+      expect(c.presets, hasLength(20));
+      expect(c.presets.any((p) => p.name == 'overflow'), false);
+      expect(messages.last, contains('최대 20개'));
+      c.dispose();
+    });
+
+    test('덮어쓸 때 확장자가 바뀌면 옛 이미지 파일을 정리한다', () async {
+      final c = OverlayController(workDir: WorkDir())
+        ..settings = await SettingsStore.load();
+      c.setFile(makeRealImage()); // .png
+      await c.savePreset('A');
+      final firstPath = c.presets.single.imagePath;
+      expect(firstPath, endsWith('.png'));
+      expect(File(firstPath).existsSync(), true);
+
+      final jpgSrc = File('${tmp.path}/src2.jpg')
+        ..writeAsBytesSync([1, 2, 3]);
+      c.setFile(jpgSrc);
+      await c.savePreset('A'); // 덮어쓰기, 확장자 png -> jpg
+
+      expect(c.presets, hasLength(1));
+      final secondPath = c.presets.single.imagePath;
+      expect(secondPath, endsWith('.jpg'));
+      expect(File(secondPath).existsSync(), true);
+      expect(File(firstPath).existsSync(), false); // 옛 png 는 정리됨
+      c.dispose();
+    });
+
+    test('hydrate 는 프리셋에 없는 고아 이미지 파일을 지운다', () async {
+      final store = await SettingsStore.load();
+      final c1 = OverlayController(workDir: WorkDir())..settings = store;
+      c1.setFile(makeRealImage());
+      await c1.savePreset('keep');
+      final keepPath = c1.presets.single.imagePath;
+      c1.dispose();
+
+      // 실패한 저장 등으로 남은 고아 파일을 흉내낸다.
+      final orphan = File('${File(keepPath).parent.path}/orphan.png')
+        ..writeAsBytesSync([9, 9, 9]);
+      expect(orphan.existsSync(), true);
+
+      final c2 = OverlayController(workDir: WorkDir())
+        ..hydrate(await SettingsStore.load());
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      expect(File(keepPath).existsSync(), true); // 참조된 파일은 유지
+      expect(orphan.existsSync(), false); // 고아는 삭제
       c2.dispose();
     });
   });

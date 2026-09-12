@@ -6,6 +6,7 @@ import '../level_controller.dart';
 import '../location_stamp_controller.dart';
 import '../photo_stamp.dart';
 import '../ui_metrics.dart';
+import 'app_bottom_sheet.dart';
 
 /// 3분할 정렬 그리드.
 class GridOverlay extends StatelessWidget {
@@ -36,12 +37,8 @@ Future<void> showGridSettingsSheet(
   GridController grid,
   LevelController level,
 ) {
-  return showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: const Color(0xFF1C1C1E),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
+  return showAppBottomSheet<void>(
+    context,
     builder: (sheetContext) => _GridSettingsSheet(grid: grid, level: level),
   );
 }

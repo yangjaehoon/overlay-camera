@@ -9,7 +9,8 @@
 /// - level_hud: 화면 중앙 수평 보조선
 /// - overlay_preset_sheet: 오버레이 프리셋 저장/불러오기 시트
 /// - quality_sheet: 촬영 화질(해상도) 선택 시트
-/// - shape_guide_hud: 도형 가이드 레이어/컨트롤/시트/프리셋
+/// - shape_guide_hud: 도형 가이드 레이어/컨트롤
+/// - shape_guide_sheet: 도형 가이드 배치 저장/불러오기 시트
 /// - video_frame_sheet: 영상에서 오버레이용 프레임 스크럽 선택
 library;
 
@@ -21,5 +22,6 @@ export 'hud/overlay_preset_sheet.dart';
 export 'hud/preview_focus_hud.dart';
 export 'hud/quality_sheet.dart';
 export 'hud/shape_guide_hud.dart';
+export 'hud/shape_guide_sheet.dart';
 export 'hud/video_frame_sheet.dart';
 export 'hud/zoom_exposure_hud.dart';

@@ -5,16 +5,12 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'change_bus.dart';
 import 'overlay_outline.dart';
 import 'overlay_preset.dart';
+import 'preset_utils.dart';
 import 'settings_store.dart';
 import 'work_dir.dart';
-
-/// 위치·크기 드래그 같은 잦은 전이가 아니라 구조 변경(파일 교체·모드 토글·
-/// 투명도 확정 등)에만 알리는 채널.
-class _StructureBus extends ChangeNotifier {
-  void ping() => notifyListeners();
-}
 
 /// 고스트 오버레이의 상태(이미지·투명도·변형·잠금·자동사용)를 담당한다.
 /// 드래그처럼 잦은 갱신이 카메라 프리뷰까지 리빌드하지 않도록 별도 [ChangeNotifier]로 분리.
@@ -27,7 +23,6 @@ class OverlayController extends ChangeNotifier {
 
   static const _minScale = 0.15;
   static const _maxScale = 6.0;
-  static const _maxPresets = 20;
 
   File? _file;
   double _opacity = 0.45;
@@ -40,7 +35,7 @@ class OverlayController extends ChangeNotifier {
 
   /// 위치 드래그(onScaleUpdate)에는 반응하지 않아야 하는 위젯(우측 컨트롤 패널,
   /// 상단 바 버튼 등)이 구독하는 채널.
-  final _StructureBus _structure = _StructureBus();
+  final StructureBus _structure = StructureBus();
   Listenable get structure => _structure;
 
   // 흰색 윤곽선 모드: 사진 대신 가장자리만 뽑은 투명 PNG를 보여준다.
@@ -58,7 +53,6 @@ class OverlayController extends ChangeNotifier {
 
   // 이름 붙여 저장한 오버레이 설정. 이미지는 앱 문서 폴더에 사본 보관.
   List<OverlayPreset> _presets = const [];
-  static int _idSeq = 0;
 
   File? get file => _file;
   bool get hasFile => _file != null;
@@ -237,9 +231,6 @@ class OverlayController extends ChangeNotifier {
 
   // --- 프리셋 저장/불러오기 -------------------------------------------------
 
-  static String _newId() =>
-      '${DateTime.now().microsecondsSinceEpoch}_${_idSeq++}';
-
   static String _extOf(String path) {
     final dot = path.lastIndexOf('.');
     if (dot < 0 || dot == path.length - 1) return 'png';
@@ -263,15 +254,19 @@ class OverlayController extends ChangeNotifier {
     final trimmed = name.trim();
     if (src == null || trimmed.isEmpty) return;
 
-    final existing = _presets.indexWhere((p) => p.name == trimmed);
-    if (existing < 0 && _presets.length >= _maxPresets) {
-      onMessage?.call('저장된 프리셋은 최대 $_maxPresets개까지입니다.');
+    final existing = resolvePresetSlot(
+      presets: _presets,
+      nameOf: (p) => p.name,
+      trimmedName: trimmed,
+    );
+    if (existing == null) {
+      onMessage?.call('저장된 프리셋은 최대 $kMaxPresetsPerController개까지입니다.');
       return;
     }
 
     try {
       final dir = await _presetDir();
-      final id = existing >= 0 ? _presets[existing].id : _newId();
+      final id = existing >= 0 ? _presets[existing].id : PresetIdSequence.next();
       final dest = File('${dir.path}/$id.${_extOf(src.path)}');
       final staleImg = existing >= 0 && _presets[existing].imagePath != dest.path
           ? File(_presets[existing].imagePath)
@@ -390,14 +385,5 @@ class OverlayController extends ChangeNotifier {
     } on Exception catch (e) {
       debugPrint('프리셋 폴더 정리 실패: $e');
     }
-  }
-}
-
-extension _FirstWhereOrNull<E> on Iterable<E> {
-  E? firstWhereOrNull(bool Function(E) test) {
-    for (final e in this) {
-      if (test(e)) return e;
-    }
-    return null;
   }
 }

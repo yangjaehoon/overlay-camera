@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+import 'app_bottom_sheet.dart';
+
 const _videoExts = {
   '.mp4', '.mov', '.m4v', '.webm', '.3gp', '.3gpp', '.mkv', '.avi', '.ts',
 };
@@ -26,16 +28,9 @@ String formatClock(int ms) {
 /// 영상에서 오버레이(고스트)로 쓸 프레임을 스크럽해서 고른다.
 /// 고른 위치(밀리초)를 돌려주고, 취소하면 null.
 Future<int?> showVideoFrameSheet(BuildContext context, String videoPath) {
-  return showModalBottomSheet<int>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: const Color(0xFF1C1C1E),
-    constraints: BoxConstraints(
-      maxHeight: MediaQuery.of(context).size.height * 0.85,
-    ),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
+  return showAppBottomSheet<int>(
+    context,
+    scrollable: true,
     builder: (_) => _VideoFrameSheet(videoPath: videoPath),
   );
 }

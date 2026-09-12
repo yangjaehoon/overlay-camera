@@ -2,6 +2,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
 import '../camera_session.dart';
+import 'app_bottom_sheet.dart';
 
 /// 시트에 노출하는 해상도 후보(너무 낮은 것·중간 단계는 생략).
 const _choices = <ResolutionPreset>[
@@ -31,12 +32,8 @@ String resolutionDesc(ResolutionPreset p) => switch (p) {
 
 /// 촬영 화질(해상도) 선택 바텀시트.
 Future<void> showResolutionSheet(BuildContext context, CameraSession session) {
-  return showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: const Color(0xFF1C1C1E),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
+  return showAppBottomSheet<void>(
+    context,
     builder: (_) => _ResolutionSheet(session: session),
   );
 }

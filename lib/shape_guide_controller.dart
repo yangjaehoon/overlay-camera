@@ -3,13 +3,10 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Offset, Size;
 
+import 'change_bus.dart';
+import 'preset_utils.dart';
 import 'settings_store.dart';
 import 'shape_guide.dart';
-
-/// 구조 변경(추가·삭제·편집 토글·불러오기)에만 알리는 채널.
-class _StructureBus extends ChangeNotifier {
-  void ping() => notifyListeners();
-}
 
 /// 화면 위에 자유롭게 배치하는 원/정사각형 가이드 도형들의 상태.
 /// 위치·크기는 화면 비율로 저장되어 앱을 재시작해도 유지된다.
@@ -26,7 +23,6 @@ class ShapeGuideController extends ChangeNotifier {
   static const _minSize = 0.06;
   static const _maxSize = 1.8;
   static const _edgeMargin = 0.02;
-  static const _maxPresets = 20;
 
   List<ShapeGuide> _shapes = const [];
   List<ShapeGuidePreset> _presets = const [];
@@ -35,7 +31,7 @@ class ShapeGuideController extends ChangeNotifier {
 
   /// 드래그 중 잦은 갱신에는 반응하지 않아야 하는 위젯(편집 완료 배너, 상단 바
   /// 아이콘 등)이 구독하는 채널. 구조가 바뀔 때만 알린다.
-  final _StructureBus _structure = _StructureBus();
+  final StructureBus _structure = StructureBus();
   Listenable get structure => _structure;
 
   /// 설정 저장소. 로드 후 주입된다.
@@ -95,7 +91,7 @@ class ShapeGuideController extends ChangeNotifier {
     _shapes = [
       ..._shapes,
       ShapeGuide(
-        id: _newId(),
+        id: PresetIdSequence.next(),
         type: type,
         cx: (0.5 + step).clamp(_edgeMargin, 1 - _edgeMargin),
         cy: (0.42 + step).clamp(_edgeMargin, 1 - _edgeMargin),
@@ -156,11 +152,6 @@ class ShapeGuideController extends ChangeNotifier {
 
   void _persist() => settings?.setShapeGuides(_shapes);
 
-  // 타임스탬프만으로는 같은 마이크로초에 여러 개를 만들면 충돌하므로 시퀀스를 붙인다.
-  static int _idSeq = 0;
-  static String _newId() =>
-      '${DateTime.now().microsecondsSinceEpoch}_${_idSeq++}';
-
   // --- 배치 저장/불러오기 -----------------------------------------------------
 
   /// 현재 배치를 [name] 이름으로 저장한다. 빈 이름이면 무시.
@@ -169,14 +160,18 @@ class ShapeGuideController extends ChangeNotifier {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
 
-    final existing = _presets.indexWhere((p) => p.name == trimmed);
-    if (existing < 0 && _presets.length >= _maxPresets) {
-      onMessage?.call('저장된 배치는 최대 $_maxPresets개까지입니다.');
+    final existing = resolvePresetSlot(
+      presets: _presets,
+      nameOf: (p) => p.name,
+      trimmedName: trimmed,
+    );
+    if (existing == null) {
+      onMessage?.call('저장된 배치는 최대 $kMaxPresetsPerController개까지입니다.');
       return;
     }
 
     final entry = ShapeGuidePreset(
-      id: existing >= 0 ? _presets[existing].id : _newId(),
+      id: existing >= 0 ? _presets[existing].id : PresetIdSequence.next(),
       name: trimmed,
       shapes: List.of(_shapes),
     );
@@ -195,19 +190,13 @@ class ShapeGuideController extends ChangeNotifier {
 
   /// 저장된 배치를 통째로 불러와 현재 도형을 교체한다. 없는 id면 무시.
   void loadPreset(String id) {
-    ShapeGuidePreset? preset;
-    for (final p in _presets) {
-      if (p.id == id) {
-        preset = p;
-        break;
-      }
-    }
+    final preset = _presets.firstWhereOrNull((p) => p.id == id);
     if (preset == null) return;
     // 다른 배치와 도형 id가 섞이지 않도록 불러올 때 새 id를 부여한다.
     _shapes = [
       for (final s in preset.shapes)
         ShapeGuide(
-          id: _newId(),
+          id: PresetIdSequence.next(),
           type: s.type,
           cx: s.cx,
           cy: s.cy,

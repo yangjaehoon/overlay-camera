@@ -7,8 +7,13 @@ import 'package:flutter/widgets.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:video_thumbnail/video_thumbnail.dart' as vt;
 
+import 'change_bus.dart';
 import 'settings_store.dart';
 import 'work_dir.dart';
+
+part 'camera_session_zoom_exposure.dart';
+part 'camera_session_timer.dart';
+part 'camera_session_capture.dart';
 
 const _flashOrder = [
   FlashMode.off,
@@ -60,70 +65,51 @@ int nextBackLensIndex(List<CameraDescription> cameras, int currentIndex) {
   return pos < 0 ? -1 : backs[(pos + 1) % backs.length];
 }
 
-/// 노출 보정 값을 [min]~[max] 로 클램프하고, [step]>0 이면 그 배수로 스냅한다.
-/// [step]<=0(연속 지원 기기)이면 클램프만 한다.
-double snapExposureOffset(double value, double min, double max, double step) {
-  final v = value.clamp(min, max).toDouble();
-  if (step <= 0) return v;
-  return ((v / step).roundToDouble() * step).clamp(min, max).toDouble();
-}
-
-/// 줌·노출처럼 드래그 중 매 프레임 바뀌는 값 전용 경량 알림 채널.
-/// 전역 notifyListeners(하단바·상단바·프리뷰 리빌드)와 분리한다.
-class _TickBus extends ChangeNotifier {
-  void ping() => notifyListeners();
-}
-
 /// 카메라 컨트롤러의 생명주기와 촬영(사진·무음·동영상)을 담당한다.
 /// 상태 변경 시 [notifyListeners]로 알리고, 안내 메시지는 [onMessage]로 전달한다.
-class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
+///
+/// 책임별로 [_ZoomExposureMixin](줌·노출), [_SelfTimerMixin](셀프타이머),
+/// [_CaptureMixin](촬영·초점)으로 나눠 각각 별도 파일(`camera_session_*.dart`,
+/// `part of` 로 이 파일과 한 라이브러리를 이룬다)에 두었다. 카메라 목록·컨트롤러
+/// 생명주기·렌즈 전환처럼 여러 책임이 함께 쓰는 상태만 이 클래스가 직접 갖는다.
+class CameraSession extends ChangeNotifier
+    with WidgetsBindingObserver, _ZoomExposureMixin, _SelfTimerMixin, _CaptureMixin {
   CameraSession({required this.workDir, this.onMessage});
 
+  @override
   final WorkDir workDir;
+  @override
   final void Function(String message)? onMessage;
 
   /// 설정 저장소. 로드 후 주입된다.
+  @override
   SettingsStore? settings;
 
   /// 촬영 해상도. 사진·무음 캡처·영상 마지막 프레임 화질을 모두 결정한다.
   /// (올리면 stampPhoto 메모리 사용량도 비례해 커진다) hydrate 로 저장값이 주입된다.
   ResolutionPreset _resolution = ResolutionPreset.high;
 
-  /// 무음 촬영 시 몰래 녹화하는 길이. 첫 프레임만 뽑으므로 짧을수록 좋다.
-  static const _silentClipDuration = Duration(milliseconds: 550);
-
   final List<CameraDescription> _cameras = [];
+  @override
   CameraController? _controller;
   int _index = 0;
   int _lastBackIndex = 0; // 마지막으로 쓴 후면 렌즈(전환 후 복귀용)
-  final _TickBus _zoomBus = _TickBus();
-  final _TickBus _evBus = _TickBus();
-  double _zoom = 1.0;
-  double _minZoom = 1.0;
-  double _maxZoom = 1.0;
-  double _ev = 0.0; // 노출 보정(EV, 스톱)
-  double _minEv = 0.0;
-  double _maxEv = 0.0;
-  double _evStep = 0.0;
   FlashMode _flashMode = FlashMode.off;
+  @override
   bool _isRecording = false;
   bool _busy = false;
   bool _bootstrapping = false;
   String? _statusMessage;
+  @override
   bool _silentShutter = false;
-  bool _aeAfLocked = false;
-  bool _focusing = false;
-  int _timerSeconds = 0;
-  int _countdown = 0;
-  Timer? _countdownTimer;
-  Completer<bool>? _countdownDone;
+  @override
   bool _disposed = false;
 
-  static const _timerOrder = [0, 3, 10];
-
   CameraController? get controller => _controller;
+  @override
   bool get isReady => _controller?.value.isInitialized ?? false;
   bool get isRecording => _isRecording;
+  @override
   bool get busy => _busy;
   String? get statusMessage => _statusMessage;
   FlashMode get flashMode => _flashMode;
@@ -143,36 +129,6 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   /// 후면에 물리 렌즈가 2개 이상이면 렌즈 순환이 가능하다(초광각·망원 등).
   bool get hasMultipleBackLenses => _backLensIndices.length >= 2;
 
-  /// 디지털 줌 상태. [zoomTick] 은 배율 변경만 알리는 경량 채널이다.
-  double get zoom => _zoom;
-  double get minZoom => _minZoom;
-  double get maxZoom => _maxZoom;
-  Listenable get zoomTick => _zoomBus;
-
-  /// 프리뷰가 눈에 띄게 확대되는 기기에서만 줌 바를 노출한다(1.15배 이상).
-  bool get canZoom => _maxZoom > _minZoom + 0.15;
-
-  /// 노출 보정(EV). [exposureTick] 은 값 변경만 알리는 경량 채널.
-  double get exposureOffset => _ev;
-  double get minExposureOffset => _minEv;
-  double get maxExposureOffset => _maxEv;
-  double get exposureStep => _evStep;
-  Listenable get exposureTick => _evBus;
-
-  /// 노출 보정 범위가 있는 기기에서만 슬라이더를 노출한다
-  /// (미지원 기기는 min==max==0 으로 보고됨).
-  bool get canSetExposure => _maxEv - _minEv > 0.01;
-
-  /// 초점·노출이 한 지점에 고정돼 있는지. 테이크마다 밝기가 튀지 않게 할 때 켠다.
-  bool get aeAfLocked => _aeAfLocked;
-
-  /// 셀프타이머 초(0=끔/3/10).
-  int get timerSeconds => _timerSeconds;
-
-  /// 카운트다운 중 남은 초(0=진행 안 함).
-  int get countdown => _countdown;
-  bool get isCountingDown => _countdown > 0;
-
   void attach() => WidgetsBinding.instance.addObserver(this);
 
   @override
@@ -186,10 +142,12 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     super.dispose();
   }
 
+  @override
   void _notify() {
     if (!_disposed) notifyListeners();
   }
 
+  @override
   void _setBusy(bool value) {
     if (_busy == value) return;
     _busy = value;
@@ -197,6 +155,7 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// 촉각 피드백. 미지원 플랫폼·테스트 환경에서는 조용히 무시한다.
+  @override
   void _haptic(Future<void> Function() feedback) {
     try {
       feedback().catchError((Object _) {});
@@ -346,57 +305,6 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// 새 컨트롤러의 줌 범위를 읽고 1배로 초기화한다.
-  Future<void> _loadZoomRange(CameraController c) async {
-    _resetZoom();
-    try {
-      final r = await Future.wait([c.getMinZoomLevel(), c.getMaxZoomLevel()]);
-      _minZoom = r[0];
-      _maxZoom = r[1];
-      _zoom = r[0];
-    } on Exception catch (e) {
-      // CameraException(줌 미지원) / MissingPluginException 등
-      debugPrint('줌 범위 조회 실패: $e');
-      _resetZoom();
-    } on UnimplementedError {
-      // 플랫폼 인터페이스 미구현(테스트 페이크 등)
-      _resetZoom();
-    }
-  }
-
-  /// 노출 보정 범위를 읽고 0(보정 없음)으로 초기화한다.
-  Future<void> _loadExposureRange(CameraController c) async {
-    _resetExposure();
-    try {
-      final r = await Future.wait([
-        c.getMinExposureOffset(),
-        c.getMaxExposureOffset(),
-        c.getExposureOffsetStepSize(),
-      ]);
-      _minEv = r[0];
-      _maxEv = r[1];
-      _evStep = r[2] < 0 ? 0.0 : r[2];
-    } on Exception catch (e) {
-      debugPrint('노출 보정 범위 조회 실패: $e');
-      _resetExposure();
-    } on UnimplementedError {
-      _resetExposure();
-    }
-  }
-
-  void _resetZoom() {
-    _zoom = 1.0;
-    _minZoom = 1.0;
-    _maxZoom = 1.0;
-  }
-
-  void _resetExposure() {
-    _ev = 0.0;
-    _minEv = 0.0;
-    _maxEv = 0.0;
-    _evStep = 0.0;
-  }
-
   /// 전면 ↔ 후면 전환. 후면으로 돌아올 땐 마지막에 쓰던 렌즈로.
   Future<void> flip() async {
     if (_isRecording || _busy || !canFlip) return;
@@ -455,68 +363,6 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// 디지털 줌 배율을 설정한다(min~max 로 클램프). 슬라이더/핀치 중 매 프레임 호출 가능.
-  Future<void> setZoom(double level) async {
-    final c = _controller;
-    if (_disposed || c == null || !c.value.isInitialized) return;
-    final z = level.clamp(_minZoom, _maxZoom).toDouble();
-    if ((z - _zoom).abs() < 0.001) return;
-    final prev = _zoom;
-    _zoom = z;
-    _zoomBus.ping();
-    try {
-      await c.setZoomLevel(z);
-    } on CameraException catch (e) {
-      debugPrint('줌 설정 실패: $e');
-      _zoom = prev; // 실제로 안 걸렸으면 UI도 되돌린다
-      if (!_disposed) _zoomBus.ping();
-    }
-  }
-
-  double? _pendingEv;
-  bool _applyingEv = false;
-
-  /// 노출 보정(EV)을 설정한다(min~max 로 클램프, 기기 스텝으로 스냅).
-  /// 슬라이더 드래그 중 매 프레임 호출돼도 마지막 값만 적용되도록 합친다
-  /// (Android 는 이전 setExposureOffset 을 취소하고 예외를 던지므로).
-  /// 참고: AE/AF 고정 중에는 기기에 따라 보정이 화면에 즉시 반영되지 않을 수 있다.
-  Future<void> setExposureOffset(double value) async {
-    final c = _controller;
-    if (_disposed || c == null || !c.value.isInitialized || !canSetExposure) {
-      return;
-    }
-    final target = snapExposureOffset(value, _minEv, _maxEv, _evStep);
-    if ((target - _ev).abs() < 0.001) return;
-    _ev = target;
-    _evBus.ping();
-
-    _pendingEv = target;
-    if (_applyingEv) return; // 적용 루프가 이미 돌고 있으면 값만 갱신해 둔다
-    _applyingEv = true;
-    try {
-      while (_pendingEv != null && !_disposed) {
-        final want = _pendingEv!;
-        _pendingEv = null;
-        final cc = _controller;
-        if (cc == null || !cc.value.isInitialized) break;
-        try {
-          final applied = await cc.setExposureOffset(want);
-          // 드래그가 멈춘 뒤에만 기기가 실제 적용한 값으로 보정(중간엔 튀지 않게).
-          if (_pendingEv == null &&
-              !_disposed &&
-              (applied - _ev).abs() > 0.001) {
-            _ev = applied;
-            _evBus.ping();
-          }
-        } on CameraException catch (e) {
-          debugPrint('노출 보정 실패: $e');
-        }
-      }
-    } finally {
-      _applyingEv = false;
-    }
-  }
-
   Future<void> cycleFlash() async {
     if (!isReady) return;
     final next = nextFlashMode(_flashMode);
@@ -538,107 +384,6 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     _notify();
   }
 
-  /// 셀프타이머를 0 → 3 → 10 → 0 순으로 바꾼다. 카운트다운 중이면 무시.
-  void cycleTimer() {
-    if (_countdown > 0) return;
-    final next = (_timerOrder.indexOf(_timerSeconds) + 1) % _timerOrder.length;
-    _timerSeconds = _timerOrder[next];
-    settings?.setTimerSeconds(_timerSeconds);
-    _haptic(HapticFeedback.selectionClick);
-    _notify();
-  }
-
-  /// 셀프타이머가 켜져 있으면 카운트다운 후, 아니면 즉시 [capture]를 실행한다.
-  /// 카운트다운 중 [cancelCountdown]이 불리면 [capture]는 실행되지 않는다.
-  Future<void> runWithTimer(Future<void> Function() capture) async {
-    if (_timerSeconds == 0) {
-      await capture();
-      return;
-    }
-    if (_countdown > 0) return; // 이미 카운트다운 중
-
-    final done = Completer<bool>();
-    _countdownDone = done;
-    _countdown = _timerSeconds;
-    _notify();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      _countdown--;
-      _notify();
-      if (_countdown <= 0) {
-        _countdownTimer?.cancel();
-        _countdownTimer = null;
-        if (!done.isCompleted) done.complete(true);
-      } else {
-        _haptic(HapticFeedback.selectionClick); // 남은 초마다 똑딱
-      }
-    });
-
-    final finished = await done.future;
-    _countdownDone = null;
-    if (finished && !_disposed) await capture();
-  }
-
-  /// 진행 중인 카운트다운을 취소한다(촬영하지 않음).
-  void cancelCountdown() {
-    if (_countdown == 0) return;
-    _stopCountdown();
-    _notify();
-  }
-
-  void _stopCountdown() {
-    _countdownTimer?.cancel();
-    _countdownTimer = null;
-    _countdown = 0;
-    if (_countdownDone?.isCompleted == false) _countdownDone!.complete(false);
-    _countdownDone = null;
-  }
-
-  /// 프리뷰의 한 지점(0~1, 좌상단 원점)에 초점·노출을 맞춘다.
-  /// [lock]이면 그 상태로 고정하고, 아니면(=false) 고정을 풀어 연속 자동으로 둔다.
-  /// 이미 조정이 진행 중이면(빠른 연타·롱프레스↔탭 경쟁) 이번 호출은 버린다.
-  Future<void> focusAt(Offset point, {bool lock = false}) async {
-    final c = _controller;
-    if (c == null || !c.value.isInitialized || _focusing) return;
-    _focusing = true;
-    final p = Offset(point.dx.clamp(0.0, 1.0), point.dy.clamp(0.0, 1.0));
-    try {
-      // locked 상태에선 point 변경이 안 먹는 기기가 있어 먼저 auto로 푼다.
-      await c.setFocusMode(FocusMode.auto);
-      await c.setExposureMode(ExposureMode.auto);
-      await Future.wait([c.setFocusPoint(p), c.setExposurePoint(p)]);
-      if (lock) {
-        // 잠금은 따로 감싼다: 한쪽만 실패해 "반쪽 잠금"으로 갇히지 않도록.
-        try {
-          await c.setFocusMode(FocusMode.locked);
-          await c.setExposureMode(ExposureMode.locked);
-          _aeAfLocked = true;
-          _haptic(HapticFeedback.mediumImpact); // 고정됨을 확실히 알림
-        } on Exception catch (e) {
-          debugPrint('AE/AF 고정 실패, 자동으로 되돌림: $e');
-          await _restoreAutoFocus(c);
-          _aeAfLocked = false;
-        }
-      } else {
-        _aeAfLocked = false;
-      }
-      _notify();
-    } on Exception catch (e) {
-      // 초점/노출 제어를 지원하지 않는 기기·렌즈
-      debugPrint('초점/노출 설정 실패: $e');
-    } finally {
-      _focusing = false;
-    }
-  }
-
-  Future<void> _restoreAutoFocus(CameraController c) async {
-    try {
-      await c.setFocusMode(FocusMode.auto);
-      await c.setExposureMode(ExposureMode.auto);
-    } on Exception catch (_) {
-      // 복구 실패까지 삼킨다(다음 focusAt이 다시 auto로 시작함)
-    }
-  }
-
   /// [action]을 촬영 중복 없이(busy 플래그로 보호) 실행한다.
   /// 이미 다른 작업이 진행 중이면 아무것도 하지 않는다.
   Future<void> runExclusive(Future<void> Function() action) async {
@@ -646,102 +391,6 @@ class CameraSession extends ChangeNotifier with WidgetsBindingObserver {
     _setBusy(true);
     try {
       await action();
-    } finally {
-      _setBusy(false);
-    }
-  }
-
-  /// 사진 한 장을 촬영해 작업 폴더에 저장하고 File을 돌려준다. 실패 시 null.
-  Future<File?> capturePhoto() => _grabStill('photo');
-
-  /// 현재 프리뷰를 캡처해 작업 폴더에 저장한다. (오버레이용, 갤러리 저장 안 함)
-  Future<File?> captureSnapshot() => _grabStill('overlay');
-
-  Future<File?> _grabStill(String prefix) async {
-    _haptic(HapticFeedback.lightImpact); // 셔터 눌린 느낌
-    try {
-      if (_silentShutter) return await _grabSilentStill(prefix);
-      final shot = await _controller!.takePicture();
-      return await workDir.copyInto(shot.path, prefix);
-    } on CameraException catch (e) {
-      debugPrint('촬영 실패: $e');
-      return null;
-    } on Exception catch (e) {
-      // 저장공간 부족 등 파일 IO 실패
-      debugPrint('촬영본 저장 실패: $e');
-      return null;
-    }
-  }
-
-  /// 셔터음이 강제되는 기기 대응: 아주 짧게 동영상을 녹화한 뒤 첫 프레임을 뽑아
-  /// 정지 이미지로 저장한다. 동영상 녹화 경로에는 셔터음이 없다.
-  Future<File?> _grabSilentStill(String prefix) async {
-    final controller = _controller!;
-    String? clipPath;
-    String? framePath;
-    try {
-      await controller.startVideoRecording();
-      await Future<void>.delayed(_silentClipDuration);
-      final clip = await controller.stopVideoRecording();
-      clipPath = clip.path;
-
-      framePath = await vt.VideoThumbnail.thumbnailFile(
-        video: clip.path,
-        imageFormat: vt.ImageFormat.JPEG,
-        timeMs: 0,
-        quality: 95,
-      );
-      if (framePath == null) return null;
-      return await workDir.copyInto(framePath, prefix, ext: 'jpg');
-    } on CameraException {
-      return null;
-    } finally {
-      for (final path in [clipPath, framePath]) {
-        if (path == null) continue;
-        try {
-          final f = File(path);
-          if (f.existsSync()) await f.delete();
-        } catch (_) {
-          // 임시 파일 정리 실패는 무시
-        }
-      }
-    }
-  }
-
-  /// 녹화 토글. 정지 시 저장된 mp4(작업 폴더)를 [onStopped]로 넘긴다.
-  Future<void> toggleRecording({
-    required Future<void> Function(File mp4) onStopped,
-  }) async {
-    if (!isReady || _busy) return;
-    _setBusy(true);
-    try {
-      if (_isRecording) {
-        try {
-          final x = await _controller!.stopVideoRecording();
-          final mp4 = await workDir.copyInto(x.path, 'video', ext: 'mp4');
-          await onStopped(mp4);
-        } on CameraException catch (e) {
-          debugPrint('동영상 정지 실패: $e');
-          onMessage?.call('동영상 저장에 실패했습니다.');
-        } on Exception catch (e) {
-          debugPrint('동영상 저장 실패: $e');
-          onMessage?.call('동영상 저장에 실패했습니다.');
-        } finally {
-          _isRecording = false;
-          _haptic(HapticFeedback.mediumImpact);
-          _notify();
-        }
-      } else {
-        try {
-          await _controller!.startVideoRecording();
-          _isRecording = true;
-          _haptic(HapticFeedback.mediumImpact);
-          _notify();
-        } on CameraException catch (e) {
-          debugPrint('녹화 시작 실패: $e');
-          onMessage?.call('녹화를 시작하지 못했습니다.');
-        }
-      }
     } finally {
       _setBusy(false);
     }

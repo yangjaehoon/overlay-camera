@@ -100,7 +100,11 @@ class OverlayQuickClear extends StatelessWidget {
 
 /// 우측 세로 투명도 슬라이더.
 class RightControls extends StatelessWidget {
-  const RightControls({super.key, required this.overlay, required this.metrics});
+  const RightControls({
+    super.key,
+    required this.overlay,
+    required this.metrics,
+  });
 
   final OverlayController overlay;
   final Metrics metrics;
@@ -110,7 +114,8 @@ class RightControls extends StatelessWidget {
     final m = metrics;
     final toggleH = m.spc(32, 28.0, 40.0);
     // 고정 요소(아이콘 + % + 토글 3개 + 프리셋 버튼 + 간격 + 세로 패딩) 높이.
-    final fixedH = m.spc(18, 16.0, 26.0) +
+    final fixedH =
+        m.spc(18, 16.0, 26.0) +
         m.spc(12, 11.0, 16.0) +
         m.sp(10) +
         toggleH * 4 +
@@ -135,8 +140,11 @@ class RightControls extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.opacity,
-                  color: Colors.white, size: m.spc(18, 16.0, 26.0)),
+              Icon(
+                Icons.opacity,
+                color: Colors.white,
+                size: m.spc(18, 16.0, 26.0),
+              ),
               SizedBox(
                 width: m.spc(40, 36.0, 52.0),
                 height: sliderLen,
@@ -145,8 +153,9 @@ class RightControls extends StatelessWidget {
                   child: SliderTheme(
                     data: SliderTheme.of(context).copyWith(
                       trackHeight: 3,
-                      overlayShape:
-                          const RoundSliderOverlayShape(overlayRadius: 14),
+                      overlayShape: const RoundSliderOverlayShape(
+                        overlayRadius: 14,
+                      ),
                     ),
                     child: Slider(
                       value: overlay.opacity,
@@ -260,8 +269,8 @@ class _OverlayIconToggle extends StatelessWidget {
                     color: !enabled
                         ? Colors.white24
                         : active
-                            ? Colors.amber
-                            : Colors.white,
+                        ? Colors.amber
+                        : Colors.white,
                   ),
           ),
         ),

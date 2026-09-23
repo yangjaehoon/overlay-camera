@@ -22,15 +22,15 @@ void main() {
   });
 
   Widget host(OverlayController c) => MaterialApp(
-        home: Stack(
-          children: [
-            ListenableBuilder(
-              listenable: c,
-              builder: (_, _) => OverlayLayer(overlay: c),
-            ),
-          ],
+    home: Stack(
+      children: [
+        ListenableBuilder(
+          listenable: c,
+          builder: (_, _) => OverlayLayer(overlay: c),
         ),
-      );
+      ],
+    ),
+  );
 
   // 좌우 반전 Transform 은 m00(대각 첫 성분)이 음수다.
   bool hasFlip(WidgetTester t) => t

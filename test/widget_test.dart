@@ -7,8 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ghost_camera/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const _permissionChannel =
-    MethodChannel('flutter.baseflow.com/permissions/methods');
+const _permissionChannel = MethodChannel(
+  'flutter.baseflow.com/permissions/methods',
+);
 
 const _fakeCamera = CameraDescription(
   name: 'back',
@@ -35,8 +36,7 @@ class _FakeCameraPlatform extends CameraPlatform {
   Future<int> createCameraWithSettings(
     CameraDescription cameraDescription,
     MediaSettings mediaSettings,
-  ) async =>
-      0;
+  ) async => 0;
 
   @override
   Stream<CameraInitializedEvent> onCameraInitialized(int cameraId) =>
@@ -102,8 +102,10 @@ void main() {
     mockPermissions(tester, granted: true);
     CameraPlatform.instance = _FakeCameraPlatform(cameras);
     addTearDown(
-      () => tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(_permissionChannel, null),
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        _permissionChannel,
+        null,
+      ),
     );
   }
 

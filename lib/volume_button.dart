@@ -9,7 +9,7 @@ import 'package:flutter/services.dart';
 /// 필요하며, 현재 채널이 없으므로 [setEnabled]가 조용히 무시된다.
 class VolumeButton {
   VolumeButton({required this.onShutter, MethodChannel? channel})
-      : _channel = channel ?? const MethodChannel('ghost_cam/volume_button') {
+    : _channel = channel ?? const MethodChannel('ghost_cam/volume_button') {
     _channel.setMethodCallHandler(_handle);
   }
 
@@ -41,9 +41,11 @@ class VolumeButton {
     _channel.setMethodCallHandler(null);
     if (_enabled) {
       _enabled = false;
-      unawaited(_channel
-          .invokeMethod('setEnabled', false)
-          .catchError((Object _) => null));
+      unawaited(
+        _channel
+            .invokeMethod('setEnabled', false)
+            .catchError((Object _) => null),
+      );
     }
   }
 }

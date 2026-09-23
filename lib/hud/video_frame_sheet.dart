@@ -184,8 +184,9 @@ class _VideoFrameSheetState extends State<_VideoFrameSheet> {
             Expanded(
               child: SliderTheme(
                 data: SliderTheme.of(context).copyWith(
-                  overlayShape:
-                      const RoundSliderOverlayShape(overlayRadius: 12),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 12,
+                  ),
                 ),
                 child: Slider(
                   value: value,

@@ -65,7 +65,10 @@ class PresetSheetScaffold extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 16),
                     child: Text(
                       emptyStateText,
-                      style: const TextStyle(color: Colors.white38, fontSize: 12),
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 12,
+                      ),
                     ),
                   )
                 else

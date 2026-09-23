@@ -121,24 +121,26 @@ class _CameraScreenState extends State<CameraScreen> {
       return;
     }
     if (!_session.isReady || _session.isRecording) return;
-    await _session.runWithTimer(() => _session.runExclusive(() async {
-          final raw = await _session.capturePhoto();
-          if (raw == null) {
-            _toast('사진을 찍지 못했습니다.');
-            return;
-          }
-          final finalFile = await _stamp.applyTo(raw);
-          if (finalFile.path != raw.path) _workDir.deleteIfOwned(raw);
-          await _gallery.saveImage(finalFile.path);
-          if (_overlay.autoUseLast) {
-            _overlay.setFile(finalFile);
-          } else {
-            _workDir.deleteIfOwned(finalFile);
-          }
-          _toast(
-            _session.silentShutter ? '무음으로 사진을 저장했습니다.' : '사진을 갤러리에 저장했습니다.',
-          );
-        }));
+    await _session.runWithTimer(
+      () => _session.runExclusive(() async {
+        final raw = await _session.capturePhoto();
+        if (raw == null) {
+          _toast('사진을 찍지 못했습니다.');
+          return;
+        }
+        final finalFile = await _stamp.applyTo(raw);
+        if (finalFile.path != raw.path) _workDir.deleteIfOwned(raw);
+        await _gallery.saveImage(finalFile.path);
+        if (_overlay.autoUseLast) {
+          _overlay.setFile(finalFile);
+        } else {
+          _workDir.deleteIfOwned(finalFile);
+        }
+        _toast(
+          _session.silentShutter ? '무음으로 사진을 저장했습니다.' : '사진을 갤러리에 저장했습니다.',
+        );
+      }),
+    );
   }
 
   Future<void> _snapshotToOverlay() async {
@@ -159,15 +161,17 @@ class _CameraScreenState extends State<CameraScreen> {
       _session.cancelCountdown();
       return;
     }
-    Future<void> toggle() => _session.toggleRecording(onStopped: (mp4) async {
-          await _gallery.saveVideo(mp4.path);
-          // timeMs 없이 부르면 정지 직전 프레임을 쓴다.
-          if (_overlay.autoUseLast) {
-            await _setOverlayFromVideoFrame(mp4.path);
-          }
-          _workDir.deleteIfOwned(mp4);
-          _toast('동영상을 갤러리에 저장했습니다.');
-        });
+    Future<void> toggle() => _session.toggleRecording(
+      onStopped: (mp4) async {
+        await _gallery.saveVideo(mp4.path);
+        // timeMs 없이 부르면 정지 직전 프레임을 쓴다.
+        if (_overlay.autoUseLast) {
+          await _setOverlayFromVideoFrame(mp4.path);
+        }
+        _workDir.deleteIfOwned(mp4);
+        _toast('동영상을 갤러리에 저장했습니다.');
+      },
+    );
     // 정지는 즉시, 시작은 타이머를 태운다.
     if (_session.isRecording) {
       await toggle();
@@ -227,7 +231,8 @@ class _CameraScreenState extends State<CameraScreen> {
       }
       if (picked == null || !mounted) return;
 
-      final isVideo = isVideoPath(picked.path) ||
+      final isVideo =
+          isVideoPath(picked.path) ||
           (picked.mimeType?.startsWith('video/') ?? false);
       if (!isVideo) {
         // 사진은 오버레이가 그 파일을 계속 참조하므로 지우지 않는다.
@@ -350,8 +355,12 @@ class _CameraScreenState extends State<CameraScreen> {
           // _shapeGuide 는 도형 드래그마다 알림을 쏘므로 여기서 제외하고,
           // TopBar 안의 도형 버튼만 자체 ListenableBuilder 로 갱신한다.
           // _overlay 도 위치 드래그는 빼고 structure 만.
-          listenable:
-              Listenable.merge([_session, _stamp, _overlay.structure, _grid]),
+          listenable: Listenable.merge([
+            _session,
+            _stamp,
+            _overlay.structure,
+            _grid,
+          ]),
           builder: (_, _) => TopBar(
             session: _session,
             stamp: _stamp,

@@ -55,7 +55,9 @@ void main() {
     var notified = 0;
     c.addListener(() => notified++);
 
-    c.onScaleUpdate(ScaleUpdateDetails(scale: 2.0, focalPointDelta: const Offset(10, 10)));
+    c.onScaleUpdate(
+      ScaleUpdateDetails(scale: 2.0, focalPointDelta: const Offset(10, 10)),
+    );
     expect(c.scale, 2.0);
 
     c.setFile(File('/tmp/a.jpg'));
@@ -237,11 +239,13 @@ void main() {
       final c = OverlayController(workDir: WorkDir())
         ..settings = await SettingsStore.load();
       c.setFile(makeRealImage());
-      c.onScaleUpdate(ScaleUpdateDetails(
-        scale: 1.5,
-        rotation: 0.3,
-        focalPointDelta: const Offset(7, -4),
-      ));
+      c.onScaleUpdate(
+        ScaleUpdateDetails(
+          scale: 1.5,
+          rotation: 0.3,
+          focalPointDelta: const Offset(7, -4),
+        ),
+      );
       c.commitOpacity(0.7);
       c.toggleMirror();
 
@@ -275,10 +279,9 @@ void main() {
       final c = OverlayController(workDir: WorkDir())
         ..settings = await SettingsStore.load();
       c.setFile(makeRealImage());
-      c.onScaleUpdate(ScaleUpdateDetails(
-        scale: 2.0,
-        focalPointDelta: const Offset(20, 10),
-      ));
+      c.onScaleUpdate(
+        ScaleUpdateDetails(scale: 2.0, focalPointDelta: const Offset(20, 10)),
+      );
       c.commitOpacity(0.33);
       c.toggleInvert();
       await c.savePreset('B');
@@ -358,8 +361,7 @@ void main() {
       expect(firstPath, endsWith('.png'));
       expect(File(firstPath).existsSync(), true);
 
-      final jpgSrc = File('${tmp.path}/src2.jpg')
-        ..writeAsBytesSync([1, 2, 3]);
+      final jpgSrc = File('${tmp.path}/src2.jpg')..writeAsBytesSync([1, 2, 3]);
       c.setFile(jpgSrc);
       await c.savePreset('A'); // 덮어쓰기, 확장자 png -> jpg
 

@@ -97,12 +97,16 @@ class LevelController extends AppController with WidgetsBindingObserver {
 
   void _start() {
     _sub?.cancel();
-    final stream = _streamFactory?.call() ??
+    final stream =
+        _streamFactory?.call() ??
         accelerometerEventStream(samplingPeriod: SensorInterval.uiInterval);
-    _sub = stream.listen(_onSample, onError: (_) {
-      // 센서 미지원 기기 등: 조용히 끈다.
-      _stop();
-    });
+    _sub = stream.listen(
+      _onSample,
+      onError: (_) {
+        // 센서 미지원 기기 등: 조용히 끈다.
+        _stop();
+      },
+    );
   }
 
   void _stop() {

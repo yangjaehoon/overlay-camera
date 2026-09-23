@@ -22,8 +22,9 @@ class _FakeCameraPlatform extends CameraPlatform {
   }
 }
 
-const _permissionChannel =
-    MethodChannel('flutter.baseflow.com/permissions/methods');
+const _permissionChannel = MethodChannel(
+  'flutter.baseflow.com/permissions/methods',
+);
 
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
@@ -51,8 +52,10 @@ void main() {
   });
 
   tearDown(() {
-    binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(_permissionChannel, null);
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      _permissionChannel,
+      null,
+    );
   });
 
   group('nextFlashMode', () {

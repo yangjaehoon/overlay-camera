@@ -56,9 +56,11 @@ class SettingsStore {
       (_prefs.getDouble(_kOpacity) ?? 0.45).clamp(0.0, 1.0).toDouble();
   void setOverlayOpacity(double v) => _prefs.setDouble(_kOpacity, v);
 
-  StampCorner get stampCorner =>
-      _enumByIndex(StampCorner.values, _prefs.getInt(_kStampCorner),
-          StampCorner.bottomRight);
+  StampCorner get stampCorner => _enumByIndex(
+    StampCorner.values,
+    _prefs.getInt(_kStampCorner),
+    StampCorner.bottomRight,
+  );
   void setStampCorner(StampCorner v) => _prefs.setInt(_kStampCorner, v.index);
 
   FlashMode get flashMode =>
@@ -82,7 +84,10 @@ class SettingsStore {
   void setGridType(GridType v) => _prefs.setInt(_kGrid, v.index);
 
   ResolutionPreset get resolutionPreset => _enumByIndex(
-      ResolutionPreset.values, _prefs.getInt(_kResolution), ResolutionPreset.high);
+    ResolutionPreset.values,
+    _prefs.getInt(_kResolution),
+    ResolutionPreset.high,
+  );
   void setResolutionPreset(ResolutionPreset v) =>
       _prefs.setInt(_kResolution, v.index);
 
@@ -115,6 +120,6 @@ class SettingsStore {
 
   static T _enumByIndex<T>(List<T> values, int? index, T fallback) =>
       (index != null && index >= 0 && index < values.length)
-          ? values[index]
-          : fallback;
+      ? values[index]
+      : fallback;
 }

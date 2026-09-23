@@ -79,8 +79,7 @@ class _GridSettingsSheet extends StatelessWidget {
             ListenableBuilder(
               listenable: level,
               builder: (context, _) => SwitchListTile(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20),
                 value: level.enabled,
                 onChanged: (_) => level.toggle(),
                 activeThumbColor: Colors.amber,
@@ -119,10 +118,7 @@ class _GridOptionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(
-        type.icon,
-        color: selected ? Colors.amber : Colors.white70,
-      ),
+      leading: Icon(type.icon, color: selected ? Colors.amber : Colors.white70),
       title: Text(
         type.label,
         style: TextStyle(
@@ -134,9 +130,7 @@ class _GridOptionTile extends StatelessWidget {
         type.description,
         style: const TextStyle(color: Colors.white54, fontSize: 12),
       ),
-      trailing: selected
-          ? const Icon(Icons.check, color: Colors.amber)
-          : null,
+      trailing: selected ? const Icon(Icons.check, color: Colors.amber) : null,
       onTap: onTap,
     );
   }
@@ -226,18 +220,30 @@ class StampCornerPicker extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _CornerButton(
-                      corner: StampCorner.topLeft, stamp: stamp, metrics: m),
+                    corner: StampCorner.topLeft,
+                    stamp: stamp,
+                    metrics: m,
+                  ),
                   _CornerButton(
-                      corner: StampCorner.topRight, stamp: stamp, metrics: m),
+                    corner: StampCorner.topRight,
+                    stamp: stamp,
+                    metrics: m,
+                  ),
                 ],
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _CornerButton(
-                      corner: StampCorner.bottomLeft, stamp: stamp, metrics: m),
+                    corner: StampCorner.bottomLeft,
+                    stamp: stamp,
+                    metrics: m,
+                  ),
                   _CornerButton(
-                      corner: StampCorner.bottomRight, stamp: stamp, metrics: m),
+                    corner: StampCorner.bottomRight,
+                    stamp: stamp,
+                    metrics: m,
+                  ),
                 ],
               ),
             ],

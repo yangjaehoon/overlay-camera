@@ -14,57 +14,36 @@ void main() {
   group('pickFlipTarget', () {
     test('후면 → 전면: 첫 전면 카메라', () {
       final cams = [back0, front];
-      expect(
-        pickFlipTarget(cams, 0, lastBackIndex: 0, toFront: true),
-        1,
-      );
+      expect(pickFlipTarget(cams, 0, lastBackIndex: 0, toFront: true), 1);
     });
 
     test('전면 → 후면: 마지막에 쓰던 후면 렌즈로 복귀', () {
       final cams = [back0, backUltra, backTele, front];
-      expect(
-        pickFlipTarget(cams, 3, lastBackIndex: 2, toFront: false),
-        2,
-      );
+      expect(pickFlipTarget(cams, 3, lastBackIndex: 2, toFront: false), 2);
     });
 
     test('전면 → 후면: lastBackIndex 가 전면이면 첫 후면으로', () {
       final cams = [back0, backUltra, front];
-      expect(
-        pickFlipTarget(cams, 2, lastBackIndex: 2, toFront: false),
-        0,
-      );
+      expect(pickFlipTarget(cams, 2, lastBackIndex: 2, toFront: false), 0);
     });
 
     test('전면 → 후면: lastBackIndex 가 범위를 벗어나면 첫 후면으로', () {
       final cams = [back0, front];
-      expect(
-        pickFlipTarget(cams, 1, lastBackIndex: 99, toFront: false),
-        0,
-      );
+      expect(pickFlipTarget(cams, 1, lastBackIndex: 99, toFront: false), 0);
     });
 
     test('대상이 없으면 -1 (전면 카메라 없음)', () {
       final cams = [back0, backUltra];
-      expect(
-        pickFlipTarget(cams, 0, lastBackIndex: 0, toFront: true),
-        -1,
-      );
+      expect(pickFlipTarget(cams, 0, lastBackIndex: 0, toFront: true), -1);
     });
 
     test('대상이 현재와 같으면 -1', () {
       final cams = [front, back0];
-      expect(
-        pickFlipTarget(cams, 1, lastBackIndex: 1, toFront: false),
-        -1,
-      );
+      expect(pickFlipTarget(cams, 1, lastBackIndex: 1, toFront: false), -1);
     });
 
     test('빈 목록이면 -1', () {
-      expect(
-        pickFlipTarget(const [], 0, lastBackIndex: 0, toFront: true),
-        -1,
-      );
+      expect(pickFlipTarget(const [], 0, lastBackIndex: 0, toFront: true), -1);
     });
   });
 

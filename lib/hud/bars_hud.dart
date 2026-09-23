@@ -281,8 +281,11 @@ class BottomBar extends StatelessWidget {
       child: Align(
         alignment: Alignment.bottomCenter,
         child: Padding(
-          padding:
-              EdgeInsets.only(bottom: m.sp(20), left: m.sp(4), right: m.sp(4)),
+          padding: EdgeInsets.only(
+            bottom: m.sp(20),
+            left: m.sp(4),
+            right: m.sp(4),
+          ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: m.size.width < 560 ? m.size.width : 560.0,
@@ -323,7 +326,8 @@ class BottomBar extends StatelessWidget {
                       ? null
                       : session.flip,
                   // 길게 누르면 후면 물리 렌즈(초광각·망원 등) 순환.
-                  onLongPress: busy || recording || !session.hasMultipleBackLenses
+                  onLongPress:
+                      busy || recording || !session.hasMultipleBackLenses
                       ? null
                       : session.cycleBackLens,
                   label: '전환',

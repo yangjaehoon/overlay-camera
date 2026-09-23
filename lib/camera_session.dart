@@ -42,7 +42,8 @@ int pickFlipTarget(
       (c) => c.lensDirection == CameraLensDirection.front,
     );
   } else {
-    final lastOk = lastBackIndex >= 0 &&
+    final lastOk =
+        lastBackIndex >= 0 &&
         lastBackIndex < cameras.length &&
         cameras[lastBackIndex].lensDirection == CameraLensDirection.back;
     next = lastOk
@@ -56,9 +57,9 @@ int pickFlipTarget(
 
 /// [cameras] 중 후면 렌즈들의 인덱스.
 List<int> backLensIndices(List<CameraDescription> cameras) => [
-      for (var i = 0; i < cameras.length; i++)
-        if (cameras[i].lensDirection == CameraLensDirection.back) i,
-    ];
+  for (var i = 0; i < cameras.length; i++)
+    if (cameras[i].lensDirection == CameraLensDirection.back) i,
+];
 
 /// 후면 물리 렌즈 순환 시 다음 인덱스. 후면 렌즈가 2개 미만이거나
 /// [currentIndex] 가 후면이 아니면 -1.

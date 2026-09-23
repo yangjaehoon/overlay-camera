@@ -12,8 +12,7 @@ enum StampCorner { topLeft, topRight, bottomLeft, bottomRight }
 extension StampCornerX on StampCorner {
   bool get isLeft =>
       this == StampCorner.topLeft || this == StampCorner.bottomLeft;
-  bool get isTop =>
-      this == StampCorner.topLeft || this == StampCorner.topRight;
+  bool get isTop => this == StampCorner.topLeft || this == StampCorner.topRight;
 
   Alignment get alignment {
     switch (this) {
@@ -47,8 +46,7 @@ String? shortPlaceName(String? admin, String? locality, String? subLocality) {
       .whereType<String>()
       .where((e) => e.isNotEmpty)
       .toList();
-  final kept =
-      tokens.length > 2 ? tokens.sublist(tokens.length - 2) : tokens;
+  final kept = tokens.length > 2 ? tokens.sublist(tokens.length - 2) : tokens;
   final place = kept.join(' ');
   return place.isEmpty ? null : place;
 }
@@ -57,7 +55,8 @@ String? shortPlaceName(String? admin, String? locality, String? subLocality) {
 Uint8List _encodeRgbaToJpg((Uint8List, int, int) args) {
   final (rgba, width, height) = args;
   // offset이 0이 아닌 뷰가 넘어와도 안전하도록 픽셀 영역만 담은 버퍼를 만든다.
-  final bytes = rgba.offsetInBytes == 0 && rgba.lengthInBytes == rgba.buffer.lengthInBytes
+  final bytes =
+      rgba.offsetInBytes == 0 && rgba.lengthInBytes == rgba.buffer.lengthInBytes
       ? rgba.buffer
       : Uint8List.fromList(rgba).buffer;
   final image = img.Image.fromBytes(
@@ -95,27 +94,28 @@ Future<File> stampPhoto(
   final double margin = w * 0.028;
   final double maxWidth = w - margin * 2;
 
-  final builder = ui.ParagraphBuilder(
-    ui.ParagraphStyle(
-      textAlign: corner.isLeft ? TextAlign.left : TextAlign.right,
-      fontSize: fontSize,
-      fontWeight: FontWeight.w600,
-      height: 1.25,
-    ),
-  )
-    ..pushStyle(
-      ui.TextStyle(
-        color: const Color(0xFFFFFFFF),
-        shadows: [
-          ui.Shadow(
-            color: const Color(0xCC000000),
-            blurRadius: fontSize * 0.3,
-            offset: ui.Offset(0, fontSize * 0.06),
+  final builder =
+      ui.ParagraphBuilder(
+          ui.ParagraphStyle(
+            textAlign: corner.isLeft ? TextAlign.left : TextAlign.right,
+            fontSize: fontSize,
+            fontWeight: FontWeight.w600,
+            height: 1.25,
           ),
-        ],
-      ),
-    )
-    ..addText(text);
+        )
+        ..pushStyle(
+          ui.TextStyle(
+            color: const Color(0xFFFFFFFF),
+            shadows: [
+              ui.Shadow(
+                color: const Color(0xCC000000),
+                blurRadius: fontSize * 0.3,
+                offset: ui.Offset(0, fontSize * 0.06),
+              ),
+            ],
+          ),
+        )
+        ..addText(text);
   final paragraph = builder.build()
     ..layout(ui.ParagraphConstraints(width: maxWidth));
 

@@ -9,7 +9,9 @@ import '../ui_metrics.dart';
 
 /// 화면 짧은 변 기준 도형 지름(px). 위젯 여러 곳에서 같은 공식을 쓰도록 분리.
 double shapeGuideDiameter(ShapeGuide s, Size screen) =>
-    (s.size * screen.shortestSide).clamp(24.0, screen.shortestSide * 2).toDouble();
+    (s.size * screen.shortestSide)
+        .clamp(24.0, screen.shortestSide * 2)
+        .toDouble();
 
 /// 사용자가 배치한 원/정사각형 가이드 도형들(선만). 삭제·크기 컨트롤은 [ShapeGuideControls]가
 /// HUD 위 최상단 레이어에서 따로 그린다(패널에 가려 못 누르는 일이 없도록).
@@ -402,8 +404,11 @@ class _DeleteBadge extends StatelessWidget {
                   color: Colors.black54,
                   shape: BoxShape.circle,
                 ),
-                child:
-                    const Icon(Icons.close, color: Colors.redAccent, size: 18),
+                child: const Icon(
+                  Icons.close,
+                  color: Colors.redAccent,
+                  size: 18,
+                ),
               ),
             ),
           ),
@@ -449,8 +454,11 @@ class ShapeGuideEditBanner extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.check,
-                        color: Colors.black87, size: m.spc(18, 16.0, 24.0)),
+                    Icon(
+                      Icons.check,
+                      color: Colors.black87,
+                      size: m.spc(18, 16.0, 24.0),
+                    ),
                     SizedBox(width: m.sp(6)),
                     Text(
                       '도형 편집 완료',
@@ -470,4 +478,3 @@ class ShapeGuideEditBanner extends StatelessWidget {
     );
   }
 }
-

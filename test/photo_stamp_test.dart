@@ -9,7 +9,10 @@ void main() {
     });
 
     test('장소가 공백뿐이면 날짜만', () {
-      expect(buildStampText(DateTime(2026, 12, 31, 23, 59), '   '), '2026.12.31 23:59');
+      expect(
+        buildStampText(DateTime(2026, 12, 31, 23, 59), '   '),
+        '2026.12.31 23:59',
+      );
     });
 
     test('장소가 있으면 둘째 줄에 붙는다', () {

@@ -8,9 +8,11 @@ class GalleryStore {
   final void Function(String message)? onMessage;
   final String album;
 
-  Future<void> saveImage(String path) => _save(() => Gal.putImage(path, album: album));
+  Future<void> saveImage(String path) =>
+      _save(() => Gal.putImage(path, album: album));
 
-  Future<void> saveVideo(String path) => _save(() => Gal.putVideo(path, album: album));
+  Future<void> saveVideo(String path) =>
+      _save(() => Gal.putVideo(path, album: album));
 
   Future<void> _save(Future<void> Function() put) async {
     try {

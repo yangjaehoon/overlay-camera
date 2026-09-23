@@ -48,9 +48,8 @@ class ZoomBar extends StatelessWidget {
           padding: EdgeInsets.only(bottom: m.spc(150, 128.0, 190.0)),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onHorizontalDragUpdate: (d) => unawaited(
-              session.setZoom(z + d.delta.dx / 160 * span),
-            ),
+            onHorizontalDragUpdate: (d) =>
+                unawaited(session.setZoom(z + d.delta.dx / 160 * span)),
             child: Container(
               padding: EdgeInsets.symmetric(
                 horizontal: m.sp(6),
@@ -102,10 +101,7 @@ class _ZoomChip extends StatelessWidget {
         customBorder: const StadiumBorder(),
         onTap: onTap,
         child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: m.sp(8),
-            vertical: m.sp(6),
-          ),
+          padding: EdgeInsets.symmetric(horizontal: m.sp(8), vertical: m.sp(6)),
           decoration: BoxDecoration(
             color: active ? Colors.amber : Colors.transparent,
             borderRadius: BorderRadius.circular(m.sp(20)),
@@ -165,7 +161,10 @@ class ExposureBar extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: Container(
           margin: EdgeInsets.only(left: m.sp(6)),
-          padding: EdgeInsets.symmetric(vertical: m.sp(12), horizontal: m.sp(2)),
+          padding: EdgeInsets.symmetric(
+            vertical: m.sp(12),
+            horizontal: m.sp(2),
+          ),
           decoration: BoxDecoration(
             color: Colors.black54,
             borderRadius: BorderRadius.circular(m.sp(24)),
@@ -186,16 +185,16 @@ class ExposureBar extends StatelessWidget {
                   child: SliderTheme(
                     data: SliderTheme.of(context).copyWith(
                       trackHeight: 3,
-                      overlayShape:
-                          const RoundSliderOverlayShape(overlayRadius: 14),
+                      overlayShape: const RoundSliderOverlayShape(
+                        overlayRadius: 14,
+                      ),
                     ),
                     child: Slider(
                       value: value,
                       min: lo,
                       max: hi,
                       divisions: divisions,
-                      onChanged: (v) =>
-                          unawaited(session.setExposureOffset(v)),
+                      onChanged: (v) => unawaited(session.setExposureOffset(v)),
                     ),
                   ),
                 ),

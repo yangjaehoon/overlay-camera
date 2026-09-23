@@ -247,10 +247,9 @@ class OverlayController extends StructuralController {
       // 덮어쓰기면 기존 id를 유지해 이미지 파일 이름도 그대로 간다.
       final id = overwritten?.id ?? PresetIdSequence.next();
       final dest = File('${dir.path}/$id.${extensionOf(src.path)}');
-      final staleImg =
-          overwritten != null && overwritten.imagePath != dest.path
-              ? File(overwritten.imagePath)
-              : null;
+      final staleImg = overwritten != null && overwritten.imagePath != dest.path
+          ? File(overwritten.imagePath)
+          : null;
 
       // 먼저 새 이미지를 복사해 두고, 그게 성공한 뒤에만 옛 이미지(확장자가
       // 바뀐 덮어쓰기 등으로 경로가 달라진 경우)를 지운다. 복사가 실패해도
@@ -274,9 +273,11 @@ class OverlayController extends StructuralController {
       );
       _presets = writePreset(_presets, slot, entry);
       _persistPresets();
-      onMessage?.call(overwritten != null
-          ? '"$trimmed" 프리셋을 덮어썼습니다.'
-          : '"$trimmed" 프리셋을 저장했습니다.');
+      onMessage?.call(
+        overwritten != null
+            ? '"$trimmed" 프리셋을 덮어썼습니다.'
+            : '"$trimmed" 프리셋을 저장했습니다.',
+      );
       notifyStructural();
     } on Exception catch (e) {
       debugPrint('오버레이 프리셋 저장 실패: $e');

@@ -87,10 +87,9 @@ class _FocusLayerState extends State<FocusLayer>
       (local.dy / size.height).clamp(0.0, 1.0),
     );
     final aspect = session.controller?.value.aspectRatio ?? 1.0;
-    unawaited(session.focusAt(
-      previewFocusPoint(screenNorm, size, aspect),
-      lock: lock,
-    ));
+    unawaited(
+      session.focusAt(previewFocusPoint(screenNorm, size, aspect), lock: lock),
+    );
     setState(() => _pos = local);
     _anim.forward(from: 0);
   }
@@ -108,19 +107,23 @@ class _FocusLayerState extends State<FocusLayer>
               gestures: {
                 TapGestureRecognizer:
                     GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
-                  TapGestureRecognizer.new,
-                  (r) => r.onTapUp =
-                      (d) => _focus(d.localPosition, size, lock: false),
-                ),
-                LongPressGestureRecognizer: GestureRecognizerFactoryWithHandlers<
-                    LongPressGestureRecognizer>(
-                  // 오버레이/도형을 "눌렀다 끌기"와 헷갈리지 않도록 살짝 길게.
-                  () => LongPressGestureRecognizer(
-                    duration: const Duration(milliseconds: 650),
-                  ),
-                  (r) => r.onLongPressStart =
-                      (d) => _focus(d.localPosition, size, lock: true),
-                ),
+                      TapGestureRecognizer.new,
+                      (r) =>
+                          r.onTapUp = (d) =>
+                              _focus(d.localPosition, size, lock: false),
+                    ),
+                LongPressGestureRecognizer:
+                    GestureRecognizerFactoryWithHandlers<
+                      LongPressGestureRecognizer
+                    >(
+                      // 오버레이/도형을 "눌렀다 끌기"와 헷갈리지 않도록 살짝 길게.
+                      () => LongPressGestureRecognizer(
+                        duration: const Duration(milliseconds: 650),
+                      ),
+                      (r) =>
+                          r.onLongPressStart = (d) =>
+                              _focus(d.localPosition, size, lock: true),
+                    ),
               },
             ),
           ),
@@ -136,8 +139,7 @@ class _FocusLayerState extends State<FocusLayer>
                   (!locked && _anim.isCompleted)) {
                 return const SizedBox.shrink();
               }
-              final maxLeft =
-                  math.max(4.0, size.width - _reticleSize - 4);
+              final maxLeft = math.max(4.0, size.width - _reticleSize - 4);
               final maxTop = math.max(
                 pad.top + 4,
                 size.height - _reticleSize - (locked ? 40.0 : 4.0),
@@ -176,8 +178,9 @@ class _FocusReticle extends StatelessWidget {
   Widget build(BuildContext context) {
     final ease = Curves.easeOut.transform(t.clamp(0.0, 1.0));
     final scale = locked ? 1.0 : 1.0 + 0.3 * (1 - ease);
-    final opacity =
-        locked ? 1.0 : (t < 0.7 ? 1.0 : (1 - (t - 0.7) / 0.3)).clamp(0.0, 1.0);
+    final opacity = locked
+        ? 1.0
+        : (t < 0.7 ? 1.0 : (1 - (t - 0.7) / 0.3)).clamp(0.0, 1.0);
     final color = locked ? Colors.amber : Colors.white;
     return Opacity(
       opacity: opacity,

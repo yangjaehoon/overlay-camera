@@ -9,8 +9,7 @@ const int kMaxPresetsPerController = 20;
 /// 같은 마이크로초에 여러 id를 만들 때 충돌하지 않도록 시퀀스를 붙여 다음 id를 만든다.
 class PresetIdSequence {
   static int _seq = 0;
-  static String next() =>
-      '${DateTime.now().microsecondsSinceEpoch}_${_seq++}';
+  static String next() => '${DateTime.now().microsecondsSinceEpoch}_${_seq++}';
 }
 
 /// 프리셋을 저장할 자리. [resolvePresetSlot]의 결과이며, 세 경우뿐이다.
@@ -60,8 +59,7 @@ List<T> writePreset<T>(List<T> presets, PresetSlot<T> slot, T entry) =>
     switch (slot) {
       PresetOverwrite(:final index) => [...presets]..[index] = entry,
       PresetAppend() => [...presets, entry],
-      PresetFull() =>
-        throw StateError('자리가 없는 프리셋 슬롯에 저장을 시도했습니다.'),
+      PresetFull() => throw StateError('자리가 없는 프리셋 슬롯에 저장을 시도했습니다.'),
     };
 
 extension FirstWhereOrNullExtension<E> on Iterable<E> {

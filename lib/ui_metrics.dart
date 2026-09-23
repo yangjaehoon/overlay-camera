@@ -3,9 +3,7 @@ import 'package:flutter/widgets.dart';
 /// 화면 크기 기반 반응형 치수. iPhone mini(~320~375)부터 태블릿(>=600)까지 대응.
 /// build()에서 한 번 만들어 하위 빌더에 넘겨 쓴다.
 class Metrics {
-  Metrics(MediaQueryData mq)
-      : size = mq.size,
-        padding = mq.padding {
+  Metrics(MediaQueryData mq) : size = mq.size, padding = mq.padding {
     final shortest = mq.size.shortestSide;
     isTablet = shortest >= 600;
     // 기준 폭 390 대비 배율. 폰은 0.82~1.15, 태블릿은 1.3 고정.

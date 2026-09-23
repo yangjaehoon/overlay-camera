@@ -10,7 +10,9 @@ void main() {
   // false를 돌려줘야 OS 크래시 리포트(TestFlight/App Store Connect)에 잡힌다.
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
-    debugPrint('FlutterError: ${details.exceptionAsString()}\n${details.stack}');
+    debugPrint(
+      'FlutterError: ${details.exceptionAsString()}\n${details.stack}',
+    );
   };
   WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
     debugPrint('Uncaught: $error\n$stack');

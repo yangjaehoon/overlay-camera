@@ -3,17 +3,17 @@ import 'package:ghost_camera/overlay_preset.dart';
 
 void main() {
   OverlayPreset sample() => const OverlayPreset(
-        id: 'p1',
-        name: '정면 상반신',
-        imagePath: '/docs/overlay_presets/p1.png',
-        opacity: 0.6,
-        dx: 12.5,
-        dy: -8.0,
-        scale: 1.4,
-        rotation: 0.2,
-        mirrored: true,
-        inverted: false,
-      );
+    id: 'p1',
+    name: '정면 상반신',
+    imagePath: '/docs/overlay_presets/p1.png',
+    opacity: 0.6,
+    dx: 12.5,
+    dy: -8.0,
+    scale: 1.4,
+    rotation: 0.2,
+    mirrored: true,
+    inverted: false,
+  );
 
   test('toJson -> tryFromJson 왕복', () {
     final back = OverlayPreset.tryFromJson(sample().toJson())!;

@@ -94,8 +94,10 @@ void main() {
     expect(again.shapeGuides.single.type, ShapeGuideType.circle);
     expect(again.shapeGuides.single.cx, 0.3);
     expect(again.shapeGuidePresets.single.name, '인물용');
-    expect(again.shapeGuidePresets.single.shapes.single.type,
-        ShapeGuideType.square);
+    expect(
+      again.shapeGuidePresets.single.shapes.single.type,
+      ShapeGuideType.square,
+    );
   });
 
   test('손상된 enum 인덱스는 기본값으로 폴백', () async {

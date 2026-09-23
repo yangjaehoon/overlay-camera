@@ -36,17 +36,17 @@ class OverlayPreset {
   final bool inverted;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'imagePath': imagePath,
-        'opacity': opacity,
-        'dx': dx,
-        'dy': dy,
-        'scale': scale,
-        'rotation': rotation,
-        'mirrored': mirrored,
-        'inverted': inverted,
-      };
+    'id': id,
+    'name': name,
+    'imagePath': imagePath,
+    'opacity': opacity,
+    'dx': dx,
+    'dy': dy,
+    'scale': scale,
+    'rotation': rotation,
+    'mirrored': mirrored,
+    'inverted': inverted,
+  };
 
   /// 손상된 프리셋이면 null(전체 목록을 날리지 않기 위해).
   static OverlayPreset? tryFromJson(Map<String, dynamic> json) {

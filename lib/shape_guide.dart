@@ -7,9 +7,9 @@ enum ShapeGuideType { circle, square }
 
 extension ShapeGuideTypeX on ShapeGuideType {
   String get label => switch (this) {
-        ShapeGuideType.circle => '원',
-        ShapeGuideType.square => '정사각형',
-      };
+    ShapeGuideType.circle => '원',
+    ShapeGuideType.square => '정사각형',
+  };
 }
 
 /// 화면 위에 사용자가 직접 배치하는 가이드 도형 하나.
@@ -36,15 +36,20 @@ class ShapeGuide {
   final double size;
 
   ShapeGuide copyWith({double? cx, double? cy, double? size}) => ShapeGuide(
-        id: id,
-        type: type,
-        cx: cx ?? this.cx,
-        cy: cy ?? this.cy,
-        size: size ?? this.size,
-      );
+    id: id,
+    type: type,
+    cx: cx ?? this.cx,
+    cy: cy ?? this.cy,
+    size: size ?? this.size,
+  );
 
-  Map<String, dynamic> toJson() =>
-      {'id': id, 'type': type.name, 'cx': cx, 'cy': cy, 'size': size};
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'type': type.name,
+    'cx': cx,
+    'cy': cy,
+    'size': size,
+  };
 
   /// 손상된 항목이면 null을 돌려준다(전체 목록을 날리지 않기 위해).
   static ShapeGuide? tryFromJson(Map<String, dynamic> json) {
@@ -112,10 +117,10 @@ class ShapeGuidePreset {
   final List<ShapeGuide> shapes;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'shapes': shapes.map((s) => s.toJson()).toList(),
-      };
+    'id': id,
+    'name': name,
+    'shapes': shapes.map((s) => s.toJson()).toList(),
+  };
 
   /// 손상된 프리셋이면 null. 도형 일부가 손상됐으면 그 도형만 걸러낸다.
   static ShapeGuidePreset? tryFromJson(Map<String, dynamic> json) {

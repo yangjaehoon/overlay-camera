@@ -101,12 +101,14 @@ class LocationStampController extends AppController {
       }
 
       var position = await Geolocator.getLastKnownPosition();
-      final stale = position == null ||
+      final stale =
+          position == null ||
           DateTime.now().difference(position.timestamp) > _positionMaxAge;
       if (stale) {
         position = await Geolocator.getCurrentPosition(
-          locationSettings:
-              const LocationSettings(accuracy: LocationAccuracy.medium),
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.medium,
+          ),
         ).timeout(_locationTimeout);
       }
 
@@ -116,8 +118,11 @@ class LocationStampController extends AppController {
       );
       if (marks.isEmpty) return;
       final mk = marks.first;
-      _place =
-          shortPlaceName(mk.administrativeArea, mk.locality, mk.subLocality);
+      _place = shortPlaceName(
+        mk.administrativeArea,
+        mk.locality,
+        mk.subLocality,
+      );
     } on TimeoutException {
       onMessage?.call('위치를 확인하지 못해 날짜만 표시됩니다.');
     } catch (e) {

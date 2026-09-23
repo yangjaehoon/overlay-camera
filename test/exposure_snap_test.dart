@@ -7,14 +7,20 @@ void main() {
       expect(snapExposureOffset(0.37, -2.0, 2.0, 0.0), 0.37);
       expect(snapExposureOffset(5.0, -2.0, 2.0, 0.0), 2.0);
       expect(snapExposureOffset(-5.0, -2.0, 2.0, 0.0), -2.0);
-      expect(snapExposureOffset(0.37, -2.0, 2.0, -1.0), 0.37); // 음수 step 도 연속 취급
+      expect(
+        snapExposureOffset(0.37, -2.0, 2.0, -1.0),
+        0.37,
+      ); // 음수 step 도 연속 취급
     });
 
     test('step 이 있으면 그 배수로 스냅', () {
       // step = 1/3
       expect(snapExposureOffset(0.30, -2.0, 2.0, 1 / 3), closeTo(1 / 3, 1e-9));
       expect(snapExposureOffset(0.10, -2.0, 2.0, 1 / 3), closeTo(0.0, 1e-9));
-      expect(snapExposureOffset(-0.30, -2.0, 2.0, 1 / 3), closeTo(-1 / 3, 1e-9));
+      expect(
+        snapExposureOffset(-0.30, -2.0, 2.0, 1 / 3),
+        closeTo(-1 / 3, 1e-9),
+      );
     });
 
     test('스냅 결과가 범위를 벗어나면 다시 클램프', () {

@@ -106,10 +106,14 @@ class ShapeGuideController extends StructuralController {
       for (final s in _shapes)
         if (s.id == id)
           s.copyWith(
-            cx: (s.cx + pixelDelta.dx / screenSize.width)
-                .clamp(_edgeMargin, 1 - _edgeMargin),
-            cy: (s.cy + pixelDelta.dy / screenSize.height)
-                .clamp(_edgeMargin, 1 - _edgeMargin),
+            cx: (s.cx + pixelDelta.dx / screenSize.width).clamp(
+              _edgeMargin,
+              1 - _edgeMargin,
+            ),
+            cy: (s.cy + pixelDelta.dy / screenSize.height).clamp(
+              _edgeMargin,
+              1 - _edgeMargin,
+            ),
             size: size?.clamp(_minSize, _maxSize),
           )
         else
@@ -151,9 +155,11 @@ class ShapeGuideController extends StructuralController {
       shapes: List.of(_shapes),
     );
     _presets = writePreset(_presets, slot, entry);
-    onMessage?.call(slot is PresetOverwrite
-        ? '"$trimmed" 배치를 덮어썼습니다.'
-        : '"$trimmed" 배치를 저장했습니다.');
+    onMessage?.call(
+      slot is PresetOverwrite
+          ? '"$trimmed" 배치를 덮어썼습니다.'
+          : '"$trimmed" 배치를 저장했습니다.',
+    );
     _persistPresets();
     notifyStructural();
   }

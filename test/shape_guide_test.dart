@@ -43,7 +43,8 @@ void main() {
   });
 
   test('손상된 항목만 걸러내고 정상 항목은 유지한다', () {
-    const raw = '['
+    const raw =
+        '['
         '{"id":"ok","type":"circle","cx":0.5,"cy":0.5,"size":0.3},'
         '{"id":"badtype","type":"triangle","cx":0.5,"cy":0.5,"size":0.3},'
         '{"id":"missing","type":"square"},'
@@ -90,8 +91,9 @@ void main() {
     ];
 
     test('encode → decode 라운드트립', () {
-      final restored =
-          decodeShapeGuidePresets(encodeShapeGuidePresets(presets));
+      final restored = decodeShapeGuidePresets(
+        encodeShapeGuidePresets(presets),
+      );
       expect(restored.length, 2);
       expect(restored[0].id, 'p1');
       expect(restored[0].name, '인물용');
@@ -109,7 +111,8 @@ void main() {
     });
 
     test('손상된 프리셋은 걸러내고, 프리셋 안의 손상된 도형만 제거한다', () {
-      const raw = '['
+      const raw =
+          '['
           '{"id":"ok","name":"정상","shapes":['
           '{"id":"a","type":"circle","cx":0.5,"cy":0.5,"size":0.3},'
           '{"id":"bad","type":"circle","cx":"x","cy":0.5,"size":0.3}'

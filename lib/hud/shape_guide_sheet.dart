@@ -40,20 +40,24 @@ class _ShapeGuideSheet extends StatelessWidget {
     return PresetSheetScaffold(
       listenable: guide,
       title: '도형 가이드',
-      description: '화면에 원·정사각형을 놓고 피사체를 맞춰 촬영하세요. 평소엔 '
+      description:
+          '화면에 원·정사각형을 놓고 피사체를 맞춰 촬영하세요. 평소엔 '
           '가이드로만 보이고, 편집 모드에서 도형을 끌어 옮기거나 오른쪽 아래 '
           '핸들로 크기를 조절합니다.',
       extraContent: _ShapePresetControls(guide: guide),
       saveLabel: '현재 배치 저장',
       onSave: guide.isEmpty ? null : () => _saveCurrentAsPreset(context),
-      emptyStateText: '저장된 배치가 없습니다. 도형을 원하는 대로 놓고 '
+      emptyStateText:
+          '저장된 배치가 없습니다. 도형을 원하는 대로 놓고 '
           '"현재 배치 저장"을 누르세요.',
       presetTiles: [
         for (final preset in guide.presets)
           PresetTile(
             key: ValueKey(preset.id),
-            leading: const Icon(Icons.dashboard_customize_outlined,
-                color: Colors.white70),
+            leading: const Icon(
+              Icons.dashboard_customize_outlined,
+              color: Colors.white70,
+            ),
             name: preset.name,
             subtitle: Text(
               '도형 ${preset.shapes.length}개',

@@ -55,8 +55,11 @@ class _OverlayPresetSheet extends StatelessWidget {
           width: _thumbSize,
           height: _thumbSize,
           color: Colors.white12,
-          child: const Icon(Icons.broken_image_outlined,
-              color: Colors.white38, size: 20),
+          child: const Icon(
+            Icons.broken_image_outlined,
+            color: Colors.white38,
+            size: 20,
+          ),
         ),
       ),
     );
@@ -67,7 +70,8 @@ class _OverlayPresetSheet extends StatelessWidget {
     return PresetSheetScaffold(
       listenable: overlay.structure,
       title: '오버레이 프리셋',
-      description: '지금 겹쳐 놓은 참조 사진과 위치·크기·회전·투명도·반전을 '
+      description:
+          '지금 겹쳐 놓은 참조 사진과 위치·크기·회전·투명도·반전을 '
           '한 세트로 저장해 두고 나중에 통째로 불러옵니다.',
       saveLabel: overlay.hasFile ? '현재 오버레이 저장' : '먼저 오버레이를 불러오세요',
       onSave: overlay.hasFile ? () => _saveCurrent(context) : null,

@@ -13,22 +13,22 @@ const _choices = <ResolutionPreset>[
 ];
 
 String resolutionLabel(ResolutionPreset p) => switch (p) {
-      ResolutionPreset.low => '아주 낮음',
-      ResolutionPreset.medium => '낮음',
-      ResolutionPreset.high => '표준',
-      ResolutionPreset.veryHigh => '높음',
-      ResolutionPreset.ultraHigh => '아주 높음',
-      ResolutionPreset.max => '최대',
-    };
+  ResolutionPreset.low => '아주 낮음',
+  ResolutionPreset.medium => '낮음',
+  ResolutionPreset.high => '표준',
+  ResolutionPreset.veryHigh => '높음',
+  ResolutionPreset.ultraHigh => '아주 높음',
+  ResolutionPreset.max => '최대',
+};
 
 String resolutionDesc(ResolutionPreset p) => switch (p) {
-      ResolutionPreset.low => '약 240p',
-      ResolutionPreset.medium => '약 480p · 용량이 가장 작음',
-      ResolutionPreset.high => '약 720p (기본)',
-      ResolutionPreset.veryHigh => '약 1080p',
-      ResolutionPreset.ultraHigh => '약 2160p (4K)',
-      ResolutionPreset.max => '기기 최고 화질 · 느릴 수 있음',
-    };
+  ResolutionPreset.low => '약 240p',
+  ResolutionPreset.medium => '약 480p · 용량이 가장 작음',
+  ResolutionPreset.high => '약 720p (기본)',
+  ResolutionPreset.veryHigh => '약 1080p',
+  ResolutionPreset.ultraHigh => '약 2160p (4K)',
+  ResolutionPreset.max => '기기 최고 화질 · 느릴 수 있음',
+};
 
 /// 촬영 화질(해상도) 선택 바텀시트.
 Future<void> showResolutionSheet(BuildContext context, CameraSession session) {
@@ -77,8 +77,9 @@ class _ResolutionSheet extends StatelessWidget {
                       resolutionLabel(preset),
                       style: TextStyle(
                         color: selected ? Colors.amber : Colors.white,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                       ),
                     ),
                     subtitle: Text(

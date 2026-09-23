@@ -134,10 +134,7 @@ class MessageView extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                OutlinedButton(
-                  onPressed: onRetry,
-                  child: const Text('다시 시도'),
-                ),
+                OutlinedButton(onPressed: onRetry, child: const Text('다시 시도')),
                 const SizedBox(width: 12),
                 OutlinedButton(
                   onPressed: onOpenSettings,

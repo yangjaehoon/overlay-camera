@@ -10,10 +10,10 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
   Future<void> nativeSends(String method) => messenger.handlePlatformMessage(
-        channel.name,
-        channel.codec.encodeMethodCall(MethodCall(method)),
-        (_) {},
-      );
+    channel.name,
+    channel.codec.encodeMethodCall(MethodCall(method)),
+    (_) {},
+  );
 
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 

@@ -78,7 +78,11 @@ void main() {
     expect(c.shapes.single.cx, lessThanOrEqualTo(0.98));
     expect(c.shapes.single.cy, lessThanOrEqualTo(0.98));
 
-    c.dragUpdate(id, pixelDelta: const Offset(-9999, -9999), screenSize: screen);
+    c.dragUpdate(
+      id,
+      pixelDelta: const Offset(-9999, -9999),
+      screenSize: screen,
+    );
     expect(c.shapes.single.cx, greaterThanOrEqualTo(0.02));
     expect(c.shapes.single.cy, greaterThanOrEqualTo(0.02));
 
@@ -110,7 +114,12 @@ void main() {
     var notified = 0;
     c.addListener(() => notified++);
 
-    c.dragUpdate(id, pixelDelta: const Offset(40, 0), screenSize: screen, size: 0.5);
+    c.dragUpdate(
+      id,
+      pixelDelta: const Offset(40, 0),
+      screenSize: screen,
+      size: 0.5,
+    );
     expect(notified, 1);
     expect(c.shapes.single.size, 0.5);
 
@@ -178,10 +187,16 @@ void main() {
       expect(structural, 1);
 
       final id = c.shapes.single.id;
-      c.dragUpdate(id,
-          pixelDelta: const Offset(10, 10), screenSize: const Size(400, 800));
-      c.dragUpdate(id,
-          pixelDelta: const Offset(10, 10), screenSize: const Size(400, 800));
+      c.dragUpdate(
+        id,
+        pixelDelta: const Offset(10, 10),
+        screenSize: const Size(400, 800),
+      );
+      c.dragUpdate(
+        id,
+        pixelDelta: const Offset(10, 10),
+        screenSize: const Size(400, 800),
+      );
       expect(structural, 1); // 드래그로는 안 늘어남
 
       c.setEditing(false); // 구조 변경
@@ -212,8 +227,11 @@ void main() {
     final a = ShapeGuideController()..settings = s;
     a.addCircle();
     a.addSquare();
-    a.dragUpdate(a.shapes.first.id,
-        pixelDelta: const Offset(20, 40), screenSize: screen);
+    a.dragUpdate(
+      a.shapes.first.id,
+      pixelDelta: const Offset(20, 40),
+      screenSize: screen,
+    );
     a.commit();
     final expectedCount = a.shapes.length;
     final expectedCx = a.shapes.first.cx;
@@ -287,8 +305,11 @@ void main() {
     test('loadPreset 은 현재 도형을 프리셋 내용으로 교체한다', () {
       final c = ShapeGuideController();
       c.addCircle();
-      c.dragUpdate(c.shapes.single.id,
-          pixelDelta: const Offset(40, 40), screenSize: screen);
+      c.dragUpdate(
+        c.shapes.single.id,
+        pixelDelta: const Offset(40, 40),
+        screenSize: screen,
+      );
       final savedCx = c.shapes.single.cx;
       c.savePreset('원 하나');
       final presetId = c.presets.single.id;

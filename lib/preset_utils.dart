@@ -13,21 +13,56 @@ class PresetIdSequence {
       '${DateTime.now().microsecondsSinceEpoch}_${_seq++}';
 }
 
-/// [presets]에서 이름이 [trimmedName]인 항목의 인덱스를 찾는다.
-/// - 있으면 그 인덱스(덮어쓰기 대상)를 반환한다.
-/// - 없는데 이미 [maxCount]개 저장돼 있으면 null을 반환해 호출자가
-///   "최대 개수" 안내를 띄우게 한다.
-/// - 없고 자리가 남아 있으면 -1(새로 추가)을 반환한다.
-int? resolvePresetSlot<T>({
+/// 프리셋을 저장할 자리. [resolvePresetSlot]의 결과이며, 세 경우뿐이다.
+sealed class PresetSlot<T> {
+  const PresetSlot();
+}
+
+/// 같은 이름이 이미 있다. [index] 자리의 [existing]을 덮어쓴다.
+final class PresetOverwrite<T> extends PresetSlot<T> {
+  const PresetOverwrite({required this.index, required this.existing});
+
+  final int index;
+  final T existing;
+}
+
+/// 같은 이름이 없고 자리도 남아 있다. 목록 끝에 새로 추가한다.
+final class PresetAppend<T> extends PresetSlot<T> {
+  const PresetAppend();
+}
+
+/// 이미 [maxCount]개가 저장돼 있어 새로 추가할 수 없다.
+final class PresetFull<T> extends PresetSlot<T> {
+  const PresetFull(this.maxCount);
+
+  final int maxCount;
+}
+
+/// [presets]에서 이름이 [trimmedName]인 항목을 찾아 저장할 자리를 정한다.
+PresetSlot<T> resolvePresetSlot<T>({
   required List<T> presets,
   required String Function(T) nameOf,
   required String trimmedName,
   int maxCount = kMaxPresetsPerController,
 }) {
-  final existing = presets.indexWhere((p) => nameOf(p) == trimmedName);
-  if (existing < 0 && presets.length >= maxCount) return null;
-  return existing;
+  final index = presets.indexWhere((p) => nameOf(p) == trimmedName);
+  if (index >= 0) {
+    return PresetOverwrite(index: index, existing: presets[index]);
+  }
+  return presets.length >= maxCount
+      ? PresetFull(maxCount)
+      : const PresetAppend();
 }
+
+/// [slot]이 가리키는 자리에 [entry]를 반영한 새 목록을 돌려준다.
+/// [PresetFull]은 저장할 자리가 없다는 뜻이므로 호출 전에 걸러야 한다.
+List<T> writePreset<T>(List<T> presets, PresetSlot<T> slot, T entry) =>
+    switch (slot) {
+      PresetOverwrite(:final index) => [...presets]..[index] = entry,
+      PresetAppend() => [...presets, entry],
+      PresetFull() =>
+        throw StateError('자리가 없는 프리셋 슬롯에 저장을 시도했습니다.'),
+    };
 
 extension FirstWhereOrNullExtension<E> on Iterable<E> {
   /// [test]를 만족하는 첫 항목, 없으면 null.

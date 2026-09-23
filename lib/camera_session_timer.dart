@@ -3,10 +3,7 @@ part of 'camera_session.dart';
 const _timerOrder = [0, 3, 10];
 
 /// [CameraSession]의 셀프타이머(0/3/10초)와 카운트다운 상태를 담당한다.
-mixin _SelfTimerMixin on ChangeNotifier {
-  bool get _disposed;
-  SettingsStore? get settings;
-  void _notify();
+mixin _SelfTimerMixin on AppController {
   void _haptic(Future<void> Function() feedback);
 
   int _timerSeconds = 0;
@@ -28,7 +25,7 @@ mixin _SelfTimerMixin on ChangeNotifier {
     _timerSeconds = _timerOrder[next];
     settings?.setTimerSeconds(_timerSeconds);
     _haptic(HapticFeedback.selectionClick);
-    _notify();
+    notify();
   }
 
   /// 셀프타이머가 켜져 있으면 카운트다운 후, 아니면 즉시 [capture]를 실행한다.
@@ -43,10 +40,10 @@ mixin _SelfTimerMixin on ChangeNotifier {
     final done = Completer<bool>();
     _countdownDone = done;
     _countdown = _timerSeconds;
-    _notify();
+    notify();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       _countdown--;
-      _notify();
+      notify();
       if (_countdown <= 0) {
         _countdownTimer?.cancel();
         _countdownTimer = null;
@@ -58,14 +55,14 @@ mixin _SelfTimerMixin on ChangeNotifier {
 
     final finished = await done.future;
     _countdownDone = null;
-    if (finished && !_disposed) await capture();
+    if (finished && !isDisposed) await capture();
   }
 
   /// 진행 중인 카운트다운을 취소한다(촬영하지 않음).
   void cancelCountdown() {
     if (_countdown == 0) return;
     _stopCountdown();
-    _notify();
+    notify();
   }
 
   void _stopCountdown() {

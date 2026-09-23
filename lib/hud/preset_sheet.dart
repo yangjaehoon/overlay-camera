@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_bottom_sheet.dart';
+
 /// 이름 붙여 저장하는 프리셋(오버레이, 도형 가이드 배치 등) 바텀시트가
 /// 공통으로 쓰는 뼈대: 드래그 핸들 + 제목/설명 + (선택) 추가 컨트롤 +
 /// 저장 버튼 + 프리셋 목록(비어 있으면 안내 문구).
@@ -41,25 +43,8 @@ class PresetSheetScaffold extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                const Center(child: SheetHandle()),
+                Text(title, style: sheetTitleStyle),
                 const SizedBox(height: 4),
                 Text(
                   description,

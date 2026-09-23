@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
+import 'controller_base.dart';
 import 'settings_store.dart';
 
 /// 가속도계 한 표본에서 계산한 수평계 상태.
@@ -29,14 +30,13 @@ LevelReading levelReadingFromAccel(double x, double y, double z) {
 /// 화면 중앙 수평 보조선(수평계). 가속도계를 구독해 좌우 기울기를 알려준다.
 /// [enabled]일 때만 센서를 구독한다(배터리). 값은 저역통과 필터로 부드럽게,
 /// 알림은 의미 있는 변화가 있을 때만 보낸다(드래그성 리빌드 방지).
-class LevelController extends ChangeNotifier with WidgetsBindingObserver {
+class LevelController extends AppController with WidgetsBindingObserver {
   static const _levelThresholdDeg = 1.0; // 이 이내면 "수평"
   static const _smoothing = 0.25; // EMA 계수
   static const _notifyStepDeg = 0.15; // 이 이상 변할 때만 알림
 
   StreamSubscription<AccelerometerEvent>? _sub;
   bool _enabled = false;
-  bool _disposed = false;
   double _roll = 0;
   bool _reliable = false;
   double _lastNotifiedRoll = 0;
@@ -50,8 +50,6 @@ class LevelController extends ChangeNotifier with WidgetsBindingObserver {
       _enabled = settings.levelEnabled;
     }
   }
-
-  SettingsStore? settings;
 
   bool get enabled => _enabled;
 
@@ -68,12 +66,12 @@ class LevelController extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
     _sub?.cancel();
     super.dispose();
   }
 
+  @override
   void hydrate(SettingsStore s) {
     settings = s;
     setEnabled(s.levelEnabled);
@@ -82,10 +80,8 @@ class LevelController extends ChangeNotifier with WidgetsBindingObserver {
   void toggle() => setEnabled(!_enabled);
 
   void setEnabled(bool value) {
-    if (_enabled == value && (_sub != null) == value) {
-      _enabled = value;
-      return;
-    }
+    // 상태와 구독이 모두 원하는 모양이면 할 일이 없다.
+    if (_enabled == value && (_sub != null) == value) return;
     _enabled = value;
     settings?.setLevelEnabled(value);
     if (value) {
@@ -96,7 +92,7 @@ class LevelController extends ChangeNotifier with WidgetsBindingObserver {
       _reliable = false;
       _lastNotifiedRoll = 0;
     }
-    if (!_disposed) notifyListeners();
+    notify();
   }
 
   void _start() {
@@ -115,7 +111,7 @@ class LevelController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _onSample(AccelerometerEvent e) {
-    if (_disposed || !_enabled) return;
+    if (isDisposed || !_enabled) return;
     final r = levelReadingFromAccel(e.x, e.y, e.z);
     final wasLevel = isLevel;
     _roll = _roll + _smoothing * (r.rollDegrees - _roll);
@@ -123,7 +119,7 @@ class LevelController extends ChangeNotifier with WidgetsBindingObserver {
     if ((_roll - _lastNotifiedRoll).abs() >= _notifyStepDeg ||
         isLevel != wasLevel) {
       _lastNotifiedRoll = _roll;
-      if (!_disposed) notifyListeners();
+      notify();
     }
   }
 

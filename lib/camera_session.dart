@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:video_thumbnail/video_thumbnail.dart' as vt;
 
 import 'change_bus.dart';
+import 'controller_base.dart';
 import 'settings_store.dart';
 import 'work_dir.dart';
 
@@ -53,13 +54,16 @@ int pickFlipTarget(
   return (next < 0 || next == currentIndex) ? -1 : next;
 }
 
+/// [cameras] 중 후면 렌즈들의 인덱스.
+List<int> backLensIndices(List<CameraDescription> cameras) => [
+      for (var i = 0; i < cameras.length; i++)
+        if (cameras[i].lensDirection == CameraLensDirection.back) i,
+    ];
+
 /// 후면 물리 렌즈 순환 시 다음 인덱스. 후면 렌즈가 2개 미만이거나
 /// [currentIndex] 가 후면이 아니면 -1.
 int nextBackLensIndex(List<CameraDescription> cameras, int currentIndex) {
-  final backs = [
-    for (var i = 0; i < cameras.length; i++)
-      if (cameras[i].lensDirection == CameraLensDirection.back) i,
-  ];
+  final backs = backLensIndices(cameras);
   if (backs.length < 2) return -1;
   final pos = backs.indexOf(currentIndex);
   return pos < 0 ? -1 : backs[(pos + 1) % backs.length];
@@ -72,18 +76,18 @@ int nextBackLensIndex(List<CameraDescription> cameras, int currentIndex) {
 /// [_CaptureMixin](촬영·초점)으로 나눠 각각 별도 파일(`camera_session_*.dart`,
 /// `part of` 로 이 파일과 한 라이브러리를 이룬다)에 두었다. 카메라 목록·컨트롤러
 /// 생명주기·렌즈 전환처럼 여러 책임이 함께 쓰는 상태만 이 클래스가 직접 갖는다.
-class CameraSession extends ChangeNotifier
-    with WidgetsBindingObserver, _ZoomExposureMixin, _SelfTimerMixin, _CaptureMixin {
+class CameraSession extends AppController
+    with
+        WidgetsBindingObserver,
+        _ZoomExposureMixin,
+        _SelfTimerMixin,
+        _CaptureMixin {
   CameraSession({required this.workDir, this.onMessage});
 
   @override
   final WorkDir workDir;
   @override
   final void Function(String message)? onMessage;
-
-  /// 설정 저장소. 로드 후 주입된다.
-  @override
-  SettingsStore? settings;
 
   /// 촬영 해상도. 사진·무음 캡처·영상 마지막 프레임 화질을 모두 결정한다.
   /// (올리면 stampPhoto 메모리 사용량도 비례해 커진다) hydrate 로 저장값이 주입된다.
@@ -102,8 +106,6 @@ class CameraSession extends ChangeNotifier
   String? _statusMessage;
   @override
   bool _silentShutter = false;
-  @override
-  bool _disposed = false;
 
   CameraController? get controller => _controller;
   @override
@@ -116,24 +118,18 @@ class CameraSession extends ChangeNotifier
   bool get silentShutter => _silentShutter;
   ResolutionPreset get resolutionPreset => _resolution;
 
-  List<int> get _backLensIndices => [
-        for (var i = 0; i < _cameras.length; i++)
-          if (_cameras[i].lensDirection == CameraLensDirection.back) i,
-      ];
-
   /// 전/후면 전환 가능 여부(둘 다 있어야).
   bool get canFlip =>
       _cameras.any((c) => c.lensDirection == CameraLensDirection.front) &&
       _cameras.any((c) => c.lensDirection == CameraLensDirection.back);
 
   /// 후면에 물리 렌즈가 2개 이상이면 렌즈 순환이 가능하다(초광각·망원 등).
-  bool get hasMultipleBackLenses => _backLensIndices.length >= 2;
+  bool get hasMultipleBackLenses => backLensIndices(_cameras).length >= 2;
 
   void attach() => WidgetsBinding.instance.addObserver(this);
 
   @override
   void dispose() {
-    _disposed = true;
     _stopCountdown();
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
@@ -143,15 +139,10 @@ class CameraSession extends ChangeNotifier
   }
 
   @override
-  void _notify() {
-    if (!_disposed) notifyListeners();
-  }
-
-  @override
   void _setBusy(bool value) {
     if (_busy == value) return;
     _busy = value;
-    _notify();
+    notify();
   }
 
   /// 촉각 피드백. 미지원 플랫폼·테스트 환경에서는 조용히 무시한다.
@@ -165,6 +156,7 @@ class CameraSession extends ChangeNotifier
   }
 
   /// 저장된 설정으로 초기 상태를 맞춘다. (플래시/무음/타이머/해상도)
+  @override
   void hydrate(SettingsStore s) {
     settings = s;
     _silentShutter = s.silentShutter;
@@ -172,7 +164,7 @@ class CameraSession extends ChangeNotifier
     _resolution = s.resolutionPreset;
     // torch를 저장했다면 앱을 켜자마자 손전등이 켜지는 것을 막는다.
     _flashMode = s.flashMode == FlashMode.torch ? FlashMode.off : s.flashMode;
-    _notify();
+    notify();
   }
 
   @override
@@ -189,7 +181,7 @@ class CameraSession extends ChangeNotifier
       _busy = false;
       _stopCountdown(); // 진행 중이던 카운트다운도 취소
       controller?.dispose();
-      _notify();
+      notify();
     } else if (state == AppLifecycleState.resumed) {
       if (_controller == null &&
           _statusMessage == null &&
@@ -206,53 +198,69 @@ class CameraSession extends ChangeNotifier
     _bootstrapping = true;
     try {
       _statusMessage = null;
-      _notify();
+      notify();
 
-      Map<Permission, PermissionStatus> statuses;
-      try {
-        statuses = await <Permission>[
-          Permission.camera,
-          Permission.microphone,
-        ].request();
-      } on Exception catch (e) {
-        debugPrint('권한 요청 실패: $e');
-        statuses = const {};
-      }
-
-      if (statuses[Permission.camera] != PermissionStatus.granted) {
-        _statusMessage = '카메라 권한이 필요합니다. 설정에서 허용해 주세요.';
-        _notify();
+      if (!await _requestCameraPermission()) {
+        _fail('카메라 권한이 필요합니다. 설정에서 허용해 주세요.');
         return;
       }
-
-      if (_cameras.isEmpty) {
-        try {
-          _cameras.addAll(await availableCameras());
-        } on CameraException catch (e) {
-          debugPrint('카메라 목록 조회 실패: $e');
-        }
-      }
-      if (_cameras.isEmpty) {
-        _statusMessage = '사용 가능한 카메라를 찾지 못했습니다.';
-        _notify();
+      if (!await _loadCameras()) {
+        _fail('사용 가능한 카메라를 찾지 못했습니다.');
         return;
       }
-
-      final savedDir = settings?.lensDirection ?? CameraLensDirection.back;
-      var idx = _cameras.indexWhere((c) => c.lensDirection == savedDir);
-      if (idx < 0) {
-        idx = _cameras.indexWhere(
-          (c) => c.lensDirection == CameraLensDirection.back,
-        );
-      }
-      _index = idx >= 0 ? idx : 0;
-      if (_cameras[_index].lensDirection == CameraLensDirection.back) {
-        _lastBackIndex = _index;
-      }
+      _selectSavedLens();
       await _initCamera(_index);
     } finally {
       _bootstrapping = false;
     }
+  }
+
+  /// 카메라·마이크 권한을 요청하고, 카메라가 허용됐는지 돌려준다.
+  /// 요청 자체가 실패하면 허용되지 않은 것으로 본다.
+  Future<bool> _requestCameraPermission() async {
+    try {
+      final statuses = await <Permission>[
+        Permission.camera,
+        Permission.microphone,
+      ].request();
+      return statuses[Permission.camera] == PermissionStatus.granted;
+    } on Exception catch (e) {
+      debugPrint('권한 요청 실패: $e');
+      return false;
+    }
+  }
+
+  /// 아직 목록이 비어 있으면 카메라 목록을 조회한다. 쓸 카메라가 있으면 true.
+  Future<bool> _loadCameras() async {
+    if (_cameras.isEmpty) {
+      try {
+        _cameras.addAll(await availableCameras());
+      } on CameraException catch (e) {
+        debugPrint('카메라 목록 조회 실패: $e');
+      }
+    }
+    return _cameras.isNotEmpty;
+  }
+
+  /// 저장된 렌즈 방향(없으면 후면, 그마저 없으면 첫 카메라)으로 [_index]를 맞춘다.
+  void _selectSavedLens() {
+    final savedDir = settings?.lensDirection ?? CameraLensDirection.back;
+    var idx = _cameras.indexWhere((c) => c.lensDirection == savedDir);
+    if (idx < 0) {
+      idx = _cameras.indexWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+      );
+    }
+    _index = idx >= 0 ? idx : 0;
+    if (_cameras[_index].lensDirection == CameraLensDirection.back) {
+      _lastBackIndex = _index;
+    }
+  }
+
+  /// 카메라를 쓸 수 없는 이유를 화면에 띄운다.
+  void _fail(String message) {
+    _statusMessage = message;
+    notify();
   }
 
   Future<void> retry() => bootstrap();
@@ -275,12 +283,11 @@ class CameraSession extends ChangeNotifier
       await controller.dispose();
       await previous?.dispose();
       if (_controller == controller) _controller = null;
-      _statusMessage = '카메라를 초기화하지 못했습니다.';
-      _notify();
+      _fail('카메라를 초기화하지 못했습니다.');
       return;
     }
 
-    if (_disposed) {
+    if (isDisposed) {
       if (_controller == controller) _controller = null;
       await controller.dispose();
       return;
@@ -294,7 +301,7 @@ class CameraSession extends ChangeNotifier
       _loadExposureRange(controller),
     ]);
     await previous?.dispose();
-    _notify();
+    notify();
   }
 
   Future<void> _applyFlashMode(CameraController c) async {
@@ -353,7 +360,7 @@ class CameraSession extends ChangeNotifier
     if (preset == _resolution) return;
     _resolution = preset;
     settings?.setResolutionPreset(preset);
-    _notify(); // 시트가 선택 표시를 즉시 갱신
+    notify(); // 시트가 선택 표시를 즉시 갱신
     if (_cameras.isEmpty) return; // 아직 부트스트랩 전이면 다음 _initCamera 가 반영
     _setBusy(true);
     try {
@@ -371,7 +378,7 @@ class CameraSession extends ChangeNotifier
       _flashMode = next;
       settings?.setFlashMode(next);
       _haptic(HapticFeedback.selectionClick);
-      _notify();
+      notify();
     } on CameraException {
       onMessage?.call('이 기기에서는 플래시를 사용할 수 없습니다.');
     }
@@ -381,7 +388,7 @@ class CameraSession extends ChangeNotifier
     _silentShutter = !_silentShutter;
     settings?.setSilentShutter(_silentShutter);
     _haptic(HapticFeedback.selectionClick);
-    _notify();
+    notify();
   }
 
   /// [action]을 촬영 중복 없이(busy 플래그로 보호) 실행한다.

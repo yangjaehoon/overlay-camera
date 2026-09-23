@@ -11,9 +11,8 @@ double snapExposureOffset(double value, double min, double max, double step) {
 /// [CameraSession]의 줌·노출 상태와 조작을 담당한다. 드래그 중 매 프레임
 /// 바뀌는 값은 [zoomTick]/[exposureTick] 이라는 경량 채널로만 알려 메인
 /// notifyListeners(하단바·상단바·프리뷰 리빌드)와 분리한다.
-mixin _ZoomExposureMixin on ChangeNotifier {
+mixin _ZoomExposureMixin on AppController {
   CameraController? get _controller;
-  bool get _disposed;
 
   final StructureBus _zoomBus = StructureBus();
   final StructureBus _evBus = StructureBus();
@@ -101,7 +100,7 @@ mixin _ZoomExposureMixin on ChangeNotifier {
   /// 디지털 줌 배율을 설정한다(min~max 로 클램프). 슬라이더/핀치 중 매 프레임 호출 가능.
   Future<void> setZoom(double level) async {
     final c = _controller;
-    if (_disposed || c == null || !c.value.isInitialized) return;
+    if (isDisposed || c == null || !c.value.isInitialized) return;
     final z = level.clamp(_minZoom, _maxZoom).toDouble();
     if ((z - _zoom).abs() < 0.001) return;
     final prev = _zoom;
@@ -112,7 +111,7 @@ mixin _ZoomExposureMixin on ChangeNotifier {
     } on CameraException catch (e) {
       debugPrint('줌 설정 실패: $e');
       _zoom = prev; // 실제로 안 걸렸으면 UI도 되돌린다
-      if (!_disposed) _zoomBus.ping();
+      if (!isDisposed) _zoomBus.ping();
     }
   }
 
@@ -122,7 +121,7 @@ mixin _ZoomExposureMixin on ChangeNotifier {
   /// 참고: AE/AF 고정 중에는 기기에 따라 보정이 화면에 즉시 반영되지 않을 수 있다.
   Future<void> setExposureOffset(double value) async {
     final c = _controller;
-    if (_disposed || c == null || !c.value.isInitialized || !canSetExposure) {
+    if (isDisposed || c == null || !c.value.isInitialized || !canSetExposure) {
       return;
     }
     final target = snapExposureOffset(value, _minEv, _maxEv, _evStep);
@@ -134,7 +133,7 @@ mixin _ZoomExposureMixin on ChangeNotifier {
     if (_applyingEv) return; // 적용 루프가 이미 돌고 있으면 값만 갱신해 둔다
     _applyingEv = true;
     try {
-      while (_pendingEv != null && !_disposed) {
+      while (_pendingEv != null && !isDisposed) {
         final want = _pendingEv!;
         _pendingEv = null;
         final cc = _controller;
@@ -143,7 +142,7 @@ mixin _ZoomExposureMixin on ChangeNotifier {
           final applied = await cc.setExposureOffset(want);
           // 드래그가 멈춘 뒤에만 기기가 실제 적용한 값으로 보정(중간엔 튀지 않게).
           if (_pendingEv == null &&
-              !_disposed &&
+              !isDisposed &&
               (applied - _ev).abs() > 0.001) {
             _ev = applied;
             _evBus.ping();

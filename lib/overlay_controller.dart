@@ -5,20 +5,26 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'change_bus.dart';
+import 'controller_base.dart';
 import 'overlay_outline.dart';
 import 'overlay_preset.dart';
+import 'path_utils.dart';
 import 'preset_utils.dart';
 import 'settings_store.dart';
 import 'work_dir.dart';
 
 /// 고스트 오버레이의 상태(이미지·투명도·변형·잠금·자동사용)를 담당한다.
 /// 드래그처럼 잦은 갱신이 카메라 프리뷰까지 리빌드하지 않도록 별도 [ChangeNotifier]로 분리.
-class OverlayController extends ChangeNotifier {
-  OverlayController({required this.workDir, this.settings, this.onMessage});
+class OverlayController extends StructuralController {
+  OverlayController({
+    required this.workDir,
+    SettingsStore? settings,
+    this.onMessage,
+  }) {
+    this.settings = settings;
+  }
 
   final WorkDir workDir;
-  SettingsStore? settings;
   final void Function(String message)? onMessage;
 
   static const _minScale = 0.15;
@@ -31,12 +37,6 @@ class OverlayController extends ChangeNotifier {
   double _rotation = 0.0;
   bool _locked = false;
   bool _autoUseLast = true;
-  bool _disposed = false;
-
-  /// 위치 드래그(onScaleUpdate)에는 반응하지 않아야 하는 위젯(우측 컨트롤 패널,
-  /// 상단 바 버튼 등)이 구독하는 채널.
-  final StructureBus _structure = StructureBus();
-  Listenable get structure => _structure;
 
   // 흰색 윤곽선 모드: 사진 대신 가장자리만 뽑은 투명 PNG를 보여준다.
   bool _outlineMode = false;
@@ -74,25 +74,6 @@ class OverlayController extends ChangeNotifier {
   File? get displayFile => _outlineMode ? (_outlineFile ?? _file) : _file;
 
   @override
-  void dispose() {
-    _disposed = true;
-    _structure.dispose();
-    super.dispose();
-  }
-
-  /// 잦은 전이(위치·크기 드래그)용. 오버레이 레이어만 반응하면 된다.
-  void _notify() {
-    if (!_disposed) notifyListeners();
-  }
-
-  /// 구조 변경용. 메인 알림 + 구조 채널을 함께 울린다.
-  void _notifyStructural() {
-    if (_disposed) return;
-    notifyListeners();
-    _structure.ping();
-  }
-
-  /// 저장된 설정으로 초기 상태를 맞춘다.
   void hydrate(SettingsStore s) {
     settings = s;
     _autoUseLast = s.autoUseLastShot;
@@ -101,7 +82,7 @@ class OverlayController extends ChangeNotifier {
     _mirrored = s.overlayMirror;
     _inverted = s.overlayInvert;
     _presets = s.overlayPresets;
-    _notifyStructural();
+    notifyStructural();
     if (_outlineMode) unawaited(_ensureOutline());
     unawaited(_pruneOrphanPresetImages());
   }
@@ -113,7 +94,7 @@ class OverlayController extends ChangeNotifier {
     _file = f;
     _outlineFile = null; // 새 사진이니 이전 윤곽선은 더 이상 유효하지 않다.
     _resetTransform();
-    _notifyStructural();
+    notifyStructural();
     if (old != null && old.path != f.path) workDir.deleteIfOwned(old);
     if (oldOutline != null) workDir.deleteIfOwned(oldOutline);
     if (_outlineMode) unawaited(_ensureOutline());
@@ -125,7 +106,7 @@ class OverlayController extends ChangeNotifier {
     _file = null;
     _outlineFile = null;
     _locked = false;
-    _notifyStructural();
+    notifyStructural();
     if (old != null) workDir.deleteIfOwned(old);
     if (oldOutline != null) workDir.deleteIfOwned(oldOutline);
   }
@@ -134,7 +115,7 @@ class OverlayController extends ChangeNotifier {
   void toggleOutline() {
     _outlineMode = !_outlineMode;
     settings?.setOverlayOutline(_outlineMode);
-    _notifyStructural();
+    notifyStructural();
     if (_outlineMode) unawaited(_ensureOutline());
   }
 
@@ -142,11 +123,11 @@ class OverlayController extends ChangeNotifier {
     final source = _file;
     if (source == null || _outlineFile != null || _tracingOutline) return;
     _tracingOutline = true;
-    _notifyStructural();
+    notifyStructural();
     try {
       final dst = await workDir.reserve('outline', ext: 'png');
       final traced = await traceOutline(source, dst);
-      if (_disposed || _file?.path != source.path) {
+      if (isDisposed || _file?.path != source.path) {
         // 추출되는 동안 오버레이가 바뀌었거나 화면이 닫혔으면 버린다.
         workDir.deleteIfOwned(traced);
         return;
@@ -160,7 +141,7 @@ class OverlayController extends ChangeNotifier {
       onMessage?.call('윤곽선을 추출하지 못해 원본으로 되돌렸습니다.');
     } finally {
       _tracingOutline = false;
-      _notifyStructural();
+      notifyStructural();
     }
   }
 
@@ -169,7 +150,7 @@ class OverlayController extends ChangeNotifier {
     if (_file == null) return;
     _mirrored = !_mirrored;
     settings?.setOverlayMirror(_mirrored);
-    _notifyStructural();
+    notifyStructural();
   }
 
   /// 오버레이 색 반전(네거티브)을 켜고 끈다.
@@ -177,7 +158,7 @@ class OverlayController extends ChangeNotifier {
     if (_file == null) return;
     _inverted = !_inverted;
     settings?.setOverlayInvert(_inverted);
-    _notifyStructural();
+    notifyStructural();
   }
 
   void _resetTransform() {
@@ -188,33 +169,33 @@ class OverlayController extends ChangeNotifier {
 
   void resetTransform() {
     _resetTransform();
-    _notifyStructural();
+    notifyStructural();
   }
 
   void toggleLock() {
     if (_file == null) return;
     _locked = !_locked;
-    _notifyStructural();
+    notifyStructural();
   }
 
   /// 투명도 슬라이더 드래그 중 실시간 갱신(저장 안 함).
   /// 우측 패널의 % 표시도 갱신돼야 하므로 구조 알림.
   void setOpacity(double v) {
     _opacity = v;
-    _notifyStructural();
+    notifyStructural();
   }
 
   /// 드래그 종료 시 확정 + 저장.
   void commitOpacity(double v) {
     _opacity = v;
     settings?.setOverlayOpacity(v);
-    _notifyStructural();
+    notifyStructural();
   }
 
   void toggleAutoUseLast() {
     _autoUseLast = !_autoUseLast;
     settings?.setAutoUseLastShot(_autoUseLast);
-    _notifyStructural();
+    notifyStructural();
   }
 
   void onScaleStart(ScaleStartDetails details) {
@@ -226,17 +207,10 @@ class OverlayController extends ChangeNotifier {
     _scale = (_baseScale * details.scale).clamp(_minScale, _maxScale);
     _rotation = _baseRotation + details.rotation;
     _offset += details.focalPointDelta;
-    _notify();
+    notify();
   }
 
   // --- 프리셋 저장/불러오기 -------------------------------------------------
-
-  static String _extOf(String path) {
-    final dot = path.lastIndexOf('.');
-    if (dot < 0 || dot == path.length - 1) return 'png';
-    final ext = path.substring(dot + 1).toLowerCase();
-    return ext.length <= 5 ? ext : 'png';
-  }
 
   Future<Directory> _presetDir() async {
     final base = await getApplicationDocumentsDirectory();
@@ -254,23 +228,29 @@ class OverlayController extends ChangeNotifier {
     final trimmed = name.trim();
     if (src == null || trimmed.isEmpty) return;
 
-    final existing = resolvePresetSlot(
+    final slot = resolvePresetSlot(
       presets: _presets,
       nameOf: (p) => p.name,
       trimmedName: trimmed,
     );
-    if (existing == null) {
-      onMessage?.call('저장된 프리셋은 최대 $kMaxPresetsPerController개까지입니다.');
+    if (slot case PresetFull(:final maxCount)) {
+      onMessage?.call('저장된 프리셋은 최대 $maxCount개까지입니다.');
       return;
     }
+    final overwritten = switch (slot) {
+      PresetOverwrite(:final existing) => existing,
+      _ => null,
+    };
 
     try {
       final dir = await _presetDir();
-      final id = existing >= 0 ? _presets[existing].id : PresetIdSequence.next();
-      final dest = File('${dir.path}/$id.${_extOf(src.path)}');
-      final staleImg = existing >= 0 && _presets[existing].imagePath != dest.path
-          ? File(_presets[existing].imagePath)
-          : null;
+      // 덮어쓰기면 기존 id를 유지해 이미지 파일 이름도 그대로 간다.
+      final id = overwritten?.id ?? PresetIdSequence.next();
+      final dest = File('${dir.path}/$id.${extensionOf(src.path)}');
+      final staleImg =
+          overwritten != null && overwritten.imagePath != dest.path
+              ? File(overwritten.imagePath)
+              : null;
 
       // 먼저 새 이미지를 복사해 두고, 그게 성공한 뒤에만 옛 이미지(확장자가
       // 바뀐 덮어쓰기 등으로 경로가 달라진 경우)를 지운다. 복사가 실패해도
@@ -292,18 +272,12 @@ class OverlayController extends ChangeNotifier {
         mirrored: _mirrored,
         inverted: _inverted,
       );
-      final next = [..._presets];
-      if (existing >= 0) {
-        next[existing] = entry;
-      } else {
-        next.add(entry);
-      }
-      _presets = next;
+      _presets = writePreset(_presets, slot, entry);
       _persistPresets();
-      onMessage?.call(existing >= 0
+      onMessage?.call(overwritten != null
           ? '"$trimmed" 프리셋을 덮어썼습니다.'
           : '"$trimmed" 프리셋을 저장했습니다.');
-      _notifyStructural();
+      notifyStructural();
     } on Exception catch (e) {
       debugPrint('오버레이 프리셋 저장 실패: $e');
       onMessage?.call('프리셋을 저장하지 못했습니다.');
@@ -337,7 +311,7 @@ class OverlayController extends ChangeNotifier {
       settings?.setOverlayOpacity(_opacity);
       settings?.setOverlayMirror(_mirrored);
       settings?.setOverlayInvert(_inverted);
-      _notifyStructural();
+      notifyStructural();
 
       if (old != null && old.path != img.path) workDir.deleteIfOwned(old);
       if (oldOutline != null) workDir.deleteIfOwned(oldOutline);
@@ -356,7 +330,7 @@ class OverlayController extends ChangeNotifier {
     final removed = _presets[idx];
     _presets = [..._presets]..removeAt(idx);
     _persistPresets();
-    _notifyStructural();
+    notifyStructural();
     try {
       final f = File(removed.imagePath);
       if (await f.exists()) await f.delete();

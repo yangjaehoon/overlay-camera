@@ -149,9 +149,9 @@ class ExposureBar extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final m = metrics;
-    final maxPanelH = m.size.height - m.padding.vertical - m.sp(300);
-    final sliderLen =
-        maxPanelH.clamp(96.0, m.isTablet ? 360.0 : 220.0).toDouble();
+    final sliderLen = m.sidePanelMaxHeight
+        .clamp(96.0, m.isTablet ? 360.0 : 220.0)
+        .toDouble();
     final lo = session.minExposureOffset;
     final hi = session.maxExposureOffset;
     final value = session.exposureOffset.clamp(lo, hi).toDouble();

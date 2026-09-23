@@ -116,10 +116,9 @@ class RightControls extends StatelessWidget {
         toggleH * 4 +
         m.sp(8) * 3 +
         m.sp(24);
-    // 상단 바·하단 바와 안 겹치도록 패널이 쓸 수 있는 세로 공간을 제한하고,
-    // 그 안에서 남는 만큼만 슬라이더에 준다(작은 폰에서 아이콘이 잘리지 않게).
-    final maxPanelH = m.size.height - m.padding.vertical - m.sp(300);
-    final sliderLen = (maxPanelH - fixedH)
+    // 패널이 쓸 수 있는 세로 공간 안에서, 고정 요소를 뺀 나머지만 슬라이더에
+    // 준다(작은 폰에서 아이콘이 잘리지 않게).
+    final sliderLen = (m.sidePanelMaxHeight - fixedH)
         .clamp(96.0, m.isTablet ? 420.0 : 260.0)
         .toDouble();
     final hasOverlay = overlay.hasFile;
@@ -165,7 +164,17 @@ class RightControls extends StatelessWidget {
                 ),
               ),
               SizedBox(height: m.sp(10)),
-              _OutlineToggle(overlay: overlay, metrics: m),
+              // 사진 대신 흰색 윤곽선만 보여주는 모드. 밝고 복잡한 배경에서
+              // 반투명 사진보다 정합선이 더 잘 보이도록 하는 용도.
+              _OverlayIconToggle(
+                icon: Icons.gesture,
+                tooltip: '흰색 윤곽선으로 보기',
+                active: overlay.outlineMode,
+                enabled: hasOverlay,
+                busy: overlay.tracingOutline,
+                onTap: overlay.toggleOutline,
+                metrics: m,
+              ),
               SizedBox(height: m.sp(8)),
               _OverlayIconToggle(
                 icon: Icons.flip,
@@ -185,10 +194,13 @@ class RightControls extends StatelessWidget {
                 metrics: m,
               ),
               SizedBox(height: m.sp(8)),
-              _PresetButton(
-                metrics: m,
+              // 프리셋 저장/불러오기는 토글이 아니라 항상 활성인 진입점.
+              _OverlayIconToggle(
+                icon: Icons.bookmarks_outlined,
+                tooltip: '오버레이 프리셋',
                 onTap: () =>
                     unawaited(showOverlayPresetSheet(context, overlay)),
+                metrics: m,
               ),
             ],
           ),
@@ -198,56 +210,27 @@ class RightControls extends StatelessWidget {
   }
 }
 
-/// 우측 패널 맨 아래 프리셋 저장/불러오기 버튼(토글 아님, 항상 활성).
-class _PresetButton extends StatelessWidget {
-  const _PresetButton({required this.metrics, required this.onTap});
-
-  final Metrics metrics;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final m = metrics;
-    final size = m.spc(32, 28.0, 40.0);
-    return Tooltip(
-      message: '오버레이 프리셋',
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: Icon(
-              Icons.bookmarks_outlined,
-              size: m.spc(20, 18.0, 26.0),
-              color: Colors.white,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 우측 패널용 소형 아이콘 토글(켜짐=앰버, 비활성=흐림).
+/// 우측 패널용 소형 아이콘 버튼. 토글로 쓰면 [active]가 켜졌을 때 앰버로,
+/// [enabled]가 false면 흐리게 그린다. [busy]면 아이콘 대신 스피너를 보여준다.
+/// 토글이 아닌 단순 진입점(프리셋 등)은 [active]/[enabled] 기본값 그대로 쓴다.
 class _OverlayIconToggle extends StatelessWidget {
   const _OverlayIconToggle({
     required this.icon,
     required this.tooltip,
-    required this.active,
-    required this.enabled,
     required this.onTap,
     required this.metrics,
+    this.active = false,
+    this.enabled = true,
+    this.busy = false,
   });
 
   final IconData icon;
   final String tooltip;
-  final bool active;
-  final bool enabled;
   final VoidCallback onTap;
   final Metrics metrics;
+  final bool active;
+  final bool enabled;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -263,46 +246,7 @@ class _OverlayIconToggle extends StatelessWidget {
           child: SizedBox(
             width: size,
             height: size,
-            child: Icon(
-              icon,
-              size: m.spc(20, 18.0, 26.0),
-              color: !enabled
-                  ? Colors.white24
-                  : active
-                      ? Colors.amber
-                      : Colors.white,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 사진 대신 흰색 윤곽선만 보여주는 모드 토글. 밝고 복잡한 배경에서
-/// 반투명 사진보다 정합선이 더 잘 보이도록 하는 용도.
-class _OutlineToggle extends StatelessWidget {
-  const _OutlineToggle({required this.overlay, required this.metrics});
-
-  final OverlayController overlay;
-  final Metrics metrics;
-
-  @override
-  Widget build(BuildContext context) {
-    final m = metrics;
-    final hasOverlay = overlay.hasFile;
-    final size = m.spc(32, 28.0, 40.0);
-    return Tooltip(
-      message: '흰색 윤곽선으로 보기',
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: hasOverlay ? overlay.toggleOutline : null,
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: overlay.tracingOutline
+            child: busy
                 ? Padding(
                     padding: EdgeInsets.all(m.sp(7)),
                     child: const CircularProgressIndicator(
@@ -311,11 +255,11 @@ class _OutlineToggle extends StatelessWidget {
                     ),
                   )
                 : Icon(
-                    Icons.gesture,
+                    icon,
                     size: m.spc(20, 18.0, 26.0),
-                    color: !hasOverlay
+                    color: !enabled
                         ? Colors.white24
-                        : overlay.outlineMode
+                        : active
                             ? Colors.amber
                             : Colors.white,
                   ),

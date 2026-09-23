@@ -1,9 +1,8 @@
 import 'dart:collection';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Offset, Size;
 
-import 'change_bus.dart';
+import 'controller_base.dart';
 import 'preset_utils.dart';
 import 'settings_store.dart';
 import 'shape_guide.dart';
@@ -14,7 +13,7 @@ import 'shape_guide.dart';
 /// 도형은 기본적으로 "가이드"로만 그려져 터치를 통과시킨다(그 아래 오버레이·카메라
 /// 조작을 막지 않음). [editing]을 켜야 드래그·크기조절·삭제가 가능해진다.
 /// 편집 모드는 저장하지 않는다(앱을 다시 켜면 항상 가이드 상태).
-class ShapeGuideController extends ChangeNotifier {
+class ShapeGuideController extends StructuralController {
   ShapeGuideController({this.onMessage});
 
   /// 저장 결과 등 짧은 안내를 사용자에게 전달할 때 쓴다.
@@ -27,15 +26,6 @@ class ShapeGuideController extends ChangeNotifier {
   List<ShapeGuide> _shapes = const [];
   List<ShapeGuidePreset> _presets = const [];
   bool _editing = false;
-  bool _disposed = false;
-
-  /// 드래그 중 잦은 갱신에는 반응하지 않아야 하는 위젯(편집 완료 배너, 상단 바
-  /// 아이콘 등)이 구독하는 채널. 구조가 바뀔 때만 알린다.
-  final StructureBus _structure = StructureBus();
-  Listenable get structure => _structure;
-
-  /// 설정 저장소. 로드 후 주입된다.
-  SettingsStore? settings;
 
   /// 외부에서 리스트를 직접 바꿔 알림/저장을 건너뛰지 못하도록 읽기 전용 뷰로 노출.
   UnmodifiableListView<ShapeGuide> get shapes => UnmodifiableListView(_shapes);
@@ -49,37 +39,18 @@ class ShapeGuideController extends ChangeNotifier {
       UnmodifiableListView(_presets);
 
   @override
-  void dispose() {
-    _disposed = true;
-    _structure.dispose();
-    super.dispose();
-  }
-
-  /// 잦은 전이(드래그)용. 도형 레이어·배지만 이 알림에 반응한다.
-  void _notify() {
-    if (!_disposed) notifyListeners();
-  }
-
-  /// 구조 변경용. 메인 알림 + 구조 채널을 함께 울린다.
-  void _notifyStructural() {
-    if (_disposed) return;
-    notifyListeners();
-    _structure.ping();
-  }
-
-  /// 저장된 설정으로 초기 상태를 맞춘다.
   void hydrate(SettingsStore s) {
     settings = s;
     _shapes = s.shapeGuides;
     _presets = s.shapeGuidePresets;
-    _notifyStructural();
+    notifyStructural();
   }
 
   /// 편집 모드를 켜고 끈다.
   void setEditing(bool value) {
     if (value == _editing) return;
     _editing = value;
-    _notifyStructural();
+    notifyStructural();
   }
 
   void addCircle() => _add(ShapeGuideType.circle);
@@ -100,7 +71,7 @@ class ShapeGuideController extends ChangeNotifier {
     ];
     _editing = true; // 방금 추가했으니 바로 배치할 수 있게 편집 모드로.
     _persist();
-    _notifyStructural();
+    notifyStructural();
   }
 
   void remove(String id) {
@@ -109,7 +80,7 @@ class ShapeGuideController extends ChangeNotifier {
     _shapes = next;
     if (_shapes.isEmpty) _editing = false; // 지울 도형이 없으면 편집 모드 종료.
     _persist();
-    _notifyStructural();
+    notifyStructural();
   }
 
   void clearAll() {
@@ -117,7 +88,7 @@ class ShapeGuideController extends ChangeNotifier {
     _shapes = const [];
     _editing = false; // 지울 게 없으니 편집 모드 종료.
     _persist();
-    _notifyStructural();
+    notifyStructural();
   }
 
   /// 드래그/핀치 중 실시간 갱신. [pixelDelta]는 이번 이벤트의 이동량,
@@ -144,7 +115,7 @@ class ShapeGuideController extends ChangeNotifier {
         else
           s,
     ];
-    _notify();
+    notify();
   }
 
   /// 이동·크기조절 제스처 종료 시 확정 저장.
@@ -160,32 +131,31 @@ class ShapeGuideController extends ChangeNotifier {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
 
-    final existing = resolvePresetSlot(
+    final slot = resolvePresetSlot(
       presets: _presets,
       nameOf: (p) => p.name,
       trimmedName: trimmed,
     );
-    if (existing == null) {
-      onMessage?.call('저장된 배치는 최대 $kMaxPresetsPerController개까지입니다.');
+    if (slot case PresetFull(:final maxCount)) {
+      onMessage?.call('저장된 배치는 최대 $maxCount개까지입니다.');
       return;
     }
 
+    // 덮어쓰기면 기존 id를 유지해, 같은 배치를 가리키던 참조가 살아 있게 한다.
     final entry = ShapeGuidePreset(
-      id: existing >= 0 ? _presets[existing].id : PresetIdSequence.next(),
+      id: switch (slot) {
+        PresetOverwrite(:final existing) => existing.id,
+        _ => PresetIdSequence.next(),
+      },
       name: trimmed,
       shapes: List.of(_shapes),
     );
-    if (existing >= 0) {
-      final next = [..._presets];
-      next[existing] = entry;
-      _presets = next;
-      onMessage?.call('"$trimmed" 배치를 덮어썼습니다.');
-    } else {
-      _presets = [..._presets, entry];
-      onMessage?.call('"$trimmed" 배치를 저장했습니다.');
-    }
+    _presets = writePreset(_presets, slot, entry);
+    onMessage?.call(slot is PresetOverwrite
+        ? '"$trimmed" 배치를 덮어썼습니다.'
+        : '"$trimmed" 배치를 저장했습니다.');
     _persistPresets();
-    _notifyStructural();
+    notifyStructural();
   }
 
   /// 저장된 배치를 통째로 불러와 현재 도형을 교체한다. 없는 id면 무시.
@@ -206,7 +176,7 @@ class ShapeGuideController extends ChangeNotifier {
     _editing = false; // 불러온 배치는 바로 촬영 가이드로 쓰도록 편집 모드 해제.
     _persist(); // 불러온 배치를 현재 작업 배치로도 저장
     onMessage?.call('"${preset.name}" 배치를 불러왔습니다.');
-    _notifyStructural();
+    notifyStructural();
   }
 
   void deletePreset(String id) {
@@ -214,7 +184,7 @@ class ShapeGuideController extends ChangeNotifier {
     if (next.length == _presets.length) return;
     _presets = next;
     _persistPresets();
-    _notifyStructural();
+    notifyStructural();
   }
 
   void _persistPresets() => settings?.setShapeGuidePresets(_presets);

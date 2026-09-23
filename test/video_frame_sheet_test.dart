@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghost_camera/camera_hud.dart';
+import 'package:ghost_camera/path_utils.dart';
 
 void main() {
   group('isVideoPath', () {

@@ -57,27 +57,12 @@ class _GridSettingsSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            const SheetHandle(),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text(
-                  '그리드',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                child: Text('그리드', style: sheetTitleStyle),
               ),
             ),
             const SizedBox(height: 4),
@@ -168,10 +153,6 @@ class StampPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!stamp.enabled) return const SizedBox.shrink();
     final m = metrics;
-    // 위쪽은 상단 바 + 위치 선택 패널, 아래쪽은 하단 촬영 바를 확실히 피하도록
-    // 스케일된 컴포넌트 높이 + 여유 간격만큼 띄운다.
-    final topClear = m.sp(52) + m.sp(34) * 2 + m.sp(48) + m.sp(24);
-    final bottomClear = m.sp(58) + m.sp(24) + m.sp(44);
     final corner = stamp.corner;
     return IgnorePointer(
       child: SafeArea(
@@ -179,9 +160,10 @@ class StampPreview extends StatelessWidget {
         child: Align(
           alignment: corner.alignment,
           child: Padding(
+            // 상단 바·위치 선택 패널(위)과 하단 촬영 바(아래)를 피해 띄운다.
             padding: EdgeInsets.only(
-              top: corner.isTop ? topClear : 0,
-              bottom: corner.isTop ? 0 : bottomClear,
+              top: corner.isTop ? m.stampTopClearance : 0,
+              bottom: corner.isTop ? 0 : m.stampBottomClearance,
             ),
             child: Text(
               stamp.previewText(),

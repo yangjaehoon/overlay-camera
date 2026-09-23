@@ -6,17 +6,6 @@ import 'package:video_player/video_player.dart';
 
 import 'app_bottom_sheet.dart';
 
-const _videoExts = {
-  '.mp4', '.mov', '.m4v', '.webm', '.3gp', '.3gpp', '.mkv', '.avi', '.ts',
-};
-
-/// 경로 확장자로 동영상 파일인지 판별한다.
-bool isVideoPath(String path) {
-  final dot = path.lastIndexOf('.');
-  if (dot < 0) return false;
-  return _videoExts.contains(path.substring(dot).toLowerCase());
-}
-
 /// 밀리초를 m:ss 로. 초는 두 자리로 채운다(예: 65000 -> "1:05").
 String formatClock(int ms) {
   final totalSec = ms ~/ 1000;
@@ -125,25 +114,10 @@ class _VideoFrameSheetState extends State<_VideoFrameSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            const SheetHandle(),
             const Align(
               alignment: Alignment.centerLeft,
-              child: Text(
-                '프레임 선택',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              child: Text('프레임 선택', style: sheetTitleStyle),
             ),
             const SizedBox(height: 12),
             _body(context),

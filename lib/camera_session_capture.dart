@@ -4,7 +4,7 @@ part of 'camera_session.dart';
 const _silentClipDuration = Duration(milliseconds: 550);
 
 /// [CameraSession]의 촬영(사진·무음·동영상)과 탭 초점(AE/AF)을 담당한다.
-mixin _CaptureMixin on ChangeNotifier {
+mixin _CaptureMixin on AppController {
   CameraController? get _controller;
   bool get isReady;
   bool get busy;
@@ -13,7 +13,6 @@ mixin _CaptureMixin on ChangeNotifier {
   bool get _silentShutter;
   bool get _isRecording;
   set _isRecording(bool v);
-  void _notify();
   void _haptic(Future<void> Function() feedback);
   void _setBusy(bool value);
 
@@ -68,15 +67,8 @@ mixin _CaptureMixin on ChangeNotifier {
     } on CameraException {
       return null;
     } finally {
-      for (final path in [clipPath, framePath]) {
-        if (path == null) continue;
-        try {
-          final f = File(path);
-          if (f.existsSync()) await f.delete();
-        } catch (_) {
-          // 임시 파일 정리 실패는 무시
-        }
-      }
+      await deleteQuietly(clipPath);
+      await deleteQuietly(framePath);
     }
   }
 
@@ -101,14 +93,14 @@ mixin _CaptureMixin on ChangeNotifier {
         } finally {
           _isRecording = false;
           _haptic(HapticFeedback.mediumImpact);
-          _notify();
+          notify();
         }
       } else {
         try {
           await _controller!.startVideoRecording();
           _isRecording = true;
           _haptic(HapticFeedback.mediumImpact);
-          _notify();
+          notify();
         } on CameraException catch (e) {
           debugPrint('녹화 시작 실패: $e');
           onMessage?.call('녹화를 시작하지 못했습니다.');
@@ -147,7 +139,7 @@ mixin _CaptureMixin on ChangeNotifier {
       } else {
         _aeAfLocked = false;
       }
-      _notify();
+      notify();
     } on Exception catch (e) {
       // 초점/노출 제어를 지원하지 않는 기기·렌즈
       debugPrint('초점/노출 설정 실패: $e');

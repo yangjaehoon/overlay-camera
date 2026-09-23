@@ -5,18 +5,16 @@ import 'package:flutter/foundation.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'controller_base.dart';
 import 'photo_stamp.dart';
 import 'settings_store.dart';
 
 /// 날짜·장소 스탬프의 상태와 위치 조회를 담당한다.
-class LocationStampController extends ChangeNotifier {
+class LocationStampController extends AppController {
   LocationStampController({this.onMessage});
 
   /// 사용자에게 보여줄 안내 메시지 콜백 (토스트 등).
   final void Function(String message)? onMessage;
-
-  /// 설정 저장소. 로드 후 주입된다.
-  SettingsStore? settings;
 
   /// getLastKnownPosition이 이보다 오래됐으면 현재 위치를 새로 받는다.
   static const _positionMaxAge = Duration(minutes: 2);
@@ -28,36 +26,25 @@ class LocationStampController extends ChangeNotifier {
   StampCorner _corner = StampCorner.bottomRight;
   String? _place;
   bool _resolving = false;
-  bool _disposed = false;
-
-  @override
-  void dispose() {
-    _disposed = true;
-    super.dispose();
-  }
-
-  void _notify() {
-    if (!_disposed) notifyListeners();
-  }
 
   bool get enabled => _enabled;
   StampCorner get corner => _corner;
   String? get place => _place;
   bool get resolving => _resolving;
 
-  /// 저장된 설정으로 초기 상태를 맞춘다.
+  @override
   void hydrate(SettingsStore s) {
     settings = s;
     _enabled = s.stampEnabled;
     _corner = s.stampCorner;
-    _notify();
+    notify();
     if (_enabled) unawaited(refreshPlace());
   }
 
   void toggle() {
     _enabled = !_enabled;
     settings?.setStampEnabled(_enabled);
-    _notify();
+    notify();
     // 켤 때마다 현재 위치를 다시 확인한다.
     if (_enabled) unawaited(refreshPlace());
   }
@@ -66,7 +53,7 @@ class LocationStampController extends ChangeNotifier {
     if (value == _corner) return;
     _corner = value;
     settings?.setStampCorner(value);
-    _notify();
+    notify();
   }
 
   /// 스탬프에 넣을 현재 문구.
@@ -97,7 +84,7 @@ class LocationStampController extends ChangeNotifier {
   Future<void> refreshPlace() async {
     if (_resolving) return;
     _resolving = true;
-    _notify();
+    notify();
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
         onMessage?.call('위치 서비스가 꺼져 있어 날짜만 표시됩니다.');
@@ -138,7 +125,7 @@ class LocationStampController extends ChangeNotifier {
       debugPrint('위치 확인 실패: $e');
     } finally {
       _resolving = false;
-      _notify();
+      notify();
     }
   }
 }

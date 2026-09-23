@@ -1,6 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show IconData, Icons;
 
+import 'controller_base.dart';
 import 'settings_store.dart';
 
 /// 촬영 가이드 그리드 종류. 안드로이드 기본 카메라와 같은 구성(없음/3×3/4×4/황금비율).
@@ -48,36 +48,22 @@ extension GridTypeX on GridType {
 }
 
 /// 그리드 종류 상태. 설정 저장소에 영속화된다.
-class GridController extends ChangeNotifier {
+class GridController extends AppController {
   GridType _type = GridType.thirds;
-  bool _disposed = false;
-
-  /// 설정 저장소. 로드 후 주입된다.
-  SettingsStore? settings;
 
   GridType get type => _type;
 
   @override
-  void dispose() {
-    _disposed = true;
-    super.dispose();
-  }
-
-  void _notify() {
-    if (!_disposed) notifyListeners();
-  }
-
-  /// 저장된 설정으로 초기 상태를 맞춘다.
   void hydrate(SettingsStore s) {
     settings = s;
     _type = s.gridType;
-    _notify();
+    notify();
   }
 
   void select(GridType value) {
     if (value == _type) return;
     _type = value;
     settings?.setGridType(value);
-    _notify();
+    notify();
   }
 }

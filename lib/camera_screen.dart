@@ -10,11 +10,13 @@ import 'package:video_thumbnail/video_thumbnail.dart' as vt;
 import 'camera_hud.dart';
 import 'camera_session.dart';
 import 'camera_widgets.dart';
+import 'controller_base.dart';
 import 'gallery_store.dart';
 import 'grid_controller.dart';
 import 'level_controller.dart';
 import 'location_stamp_controller.dart';
 import 'overlay_controller.dart';
+import 'path_utils.dart';
 import 'settings_store.dart';
 import 'shape_guide_controller.dart';
 import 'ui_metrics.dart';
@@ -51,6 +53,16 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _settingsLoaded = false;
   bool _pickingOverlay = false; // 갤러리 선택 + 프레임 추출 진행 중
 
+  /// 설정 주입·정리를 한 번에 돌리기 위한 목록. 컨트롤러를 추가하면 여기에도 넣는다.
+  late final List<AppController> _controllers = [
+    _session,
+    _stamp,
+    _overlay,
+    _grid,
+    _level,
+    _shapeGuide,
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -71,12 +83,9 @@ class _CameraScreenState extends State<CameraScreen> {
   void dispose() {
     _session.removeListener(_syncVolumeButton);
     _volumeButton.dispose();
-    _session.dispose();
-    _stamp.dispose();
-    _overlay.dispose();
-    _grid.dispose();
-    _level.dispose();
-    _shapeGuide.dispose();
+    for (final c in _controllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -89,13 +98,9 @@ class _CameraScreenState extends State<CameraScreen> {
         final s = await SettingsStore.load();
         if (!mounted) return;
         _settingsLoaded = true;
-        _session.settings = s;
-        _session.hydrate(s);
-        _stamp.hydrate(s);
-        _overlay.hydrate(s);
-        _grid.hydrate(s);
-        _level.hydrate(s);
-        _shapeGuide.hydrate(s);
+        for (final c in _controllers) {
+          c.hydrate(s);
+        }
       } on Exception catch (e) {
         debugPrint('설정 로드 실패: $e');
       }
@@ -156,8 +161,9 @@ class _CameraScreenState extends State<CameraScreen> {
     }
     Future<void> toggle() => _session.toggleRecording(onStopped: (mp4) async {
           await _gallery.saveVideo(mp4.path);
+          // timeMs 없이 부르면 정지 직전 프레임을 쓴다.
           if (_overlay.autoUseLast) {
-            await _setOverlayFromVideoLastFrame(mp4.path);
+            await _setOverlayFromVideoFrame(mp4.path);
           }
           _workDir.deleteIfOwned(mp4);
           _toast('동영상을 갤러리에 저장했습니다.');
@@ -169,9 +175,6 @@ class _CameraScreenState extends State<CameraScreen> {
       await _session.runWithTimer(toggle);
     }
   }
-
-  Future<void> _setOverlayFromVideoLastFrame(String videoPath) =>
-      _setOverlayFromVideoFrame(videoPath);
 
   /// 영상에서 한 프레임을 뽑아 작업 폴더로 복사한 뒤 오버레이로 쓴다.
   /// [timeMs]가 없으면 정지 직전(마지막) 프레임을 노린다.
@@ -204,12 +207,9 @@ class _CameraScreenState extends State<CameraScreen> {
       debugPrint('프레임 추출 실패: $e');
       _toast('영상에서 프레임을 뽑지 못했습니다.');
     } finally {
-      if (thumbPath != null && thumbPath != _overlay.file?.path) {
-        try {
-          final f = File(thumbPath);
-          if (f.existsSync()) await f.delete();
-        } catch (_) {}
-      }
+      // 오버레이가 실제로 쓰는 파일은 작업 폴더의 사본이므로, 뽑아낸 원본
+      // 썸네일은 지운다(오버레이가 그 경로를 그대로 쓰는 경우만 제외).
+      if (thumbPath != _overlay.file?.path) await deleteQuietly(thumbPath);
     }
   }
 
@@ -244,12 +244,7 @@ class _CameraScreenState extends State<CameraScreen> {
           await _setOverlayFromVideoFrame(videoCopy, timeMs: ms);
         }
       } finally {
-        unawaited(
-          File(videoCopy).delete().catchError((Object e) {
-            debugPrint('영상 사본 삭제 실패: $e');
-            return File(videoCopy);
-          }),
-        );
+        unawaited(deleteQuietly(videoCopy));
       }
     } finally {
       _pickingOverlay = false;

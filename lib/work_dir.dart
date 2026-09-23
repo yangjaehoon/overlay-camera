@@ -3,6 +3,18 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+/// [path]가 가리키는 파일을 지운다. 경로가 없거나(null) 파일이 이미 사라졌거나
+/// 삭제가 실패해도 조용히 넘어간다. 임시 파일 정리는 실패해도 치명적이지 않고,
+/// 호출부마다 try/catch 를 반복할 이유도 없다.
+Future<void> deleteQuietly(String? path) async {
+  if (path == null) return;
+  try {
+    await File(path).delete();
+  } catch (_) {
+    // 이미 없거나 권한 문제: 무시한다.
+  }
+}
+
 /// 촬영 임시본을 두는 캐시 하위 폴더 관리.
 ///
 /// 문서 디렉터리와 달리 OS가 저장공간 압박 시 정리할 수 있고, 앱도 세션 시작 시
@@ -45,7 +57,7 @@ class WorkDir {
   void deleteIfOwned(File file) {
     final dir = _dir;
     if (dir == null || !file.path.startsWith(dir.path)) return;
-    unawaited(file.delete().catchError((Object _) => file));
+    unawaited(deleteQuietly(file.path));
   }
 
   /// [keepPath]를 제외한 작업 폴더의 잔여 파일을 모두 지운다.
@@ -54,11 +66,7 @@ class WorkDir {
       final dir = await _ensure();
       await for (final entry in dir.list()) {
         if (entry is File && entry.path != keepPath) {
-          try {
-            await entry.delete();
-          } catch (_) {
-            // 개별 삭제 실패는 무시
-          }
+          await deleteQuietly(entry.path);
         }
       }
     } catch (_) {

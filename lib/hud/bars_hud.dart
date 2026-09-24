@@ -10,29 +10,18 @@ import '../overlay_controller.dart';
 import '../shape_guide_controller.dart';
 import '../ui_metrics.dart';
 
-IconData flashIcon(FlashMode mode) {
-  switch (mode) {
-    case FlashMode.off:
-      return Icons.flash_off;
-    case FlashMode.auto:
-      return Icons.flash_auto;
-    case FlashMode.always:
-      return Icons.flash_on;
-    case FlashMode.torch:
-      return Icons.highlight;
-  }
-}
+IconData flashIcon(FlashMode mode) => switch (mode) {
+  FlashMode.off => Icons.flash_off,
+  FlashMode.auto => Icons.flash_auto,
+  FlashMode.always => Icons.flash_on,
+  FlashMode.torch => Icons.highlight,
+};
 
-IconData timerIcon(int seconds) {
-  switch (seconds) {
-    case 3:
-      return Icons.timer_3;
-    case 10:
-      return Icons.timer_10;
-    default:
-      return Icons.timer_off_outlined;
-  }
-}
+IconData timerIcon(int seconds) => switch (seconds) {
+  3 => Icons.timer_3,
+  10 => Icons.timer_10,
+  _ => Icons.timer_off_outlined,
+};
 
 /// 셀프타이머 카운트다운. [session.countdown] > 0 일 때 화면 전체에 큰 숫자를
 /// 띄우고, 아무 데나 탭하면 [onCancel]로 취소한다.

@@ -22,6 +22,9 @@ Future<void> deleteQuietly(String? path) async {
 class WorkDir {
   Directory? _dir;
 
+  /// 같은 밀리초에 두 파일을 만들어도 경로가 겹치지 않게 붙이는 일련번호.
+  int _seq = 0;
+
   Future<Directory> _ensure() async {
     final cached = _dir;
     if (cached != null) return cached;
@@ -32,25 +35,24 @@ class WorkDir {
     return dir;
   }
 
+  /// 작업 폴더 안에 아직 존재하지 않는 새 파일 경로를 예약한다.
+  /// (파일 복사가 아니라 직접 내용을 만들어 써야 하는 경우, 예: 이미지 가공 결과)
+  Future<File> reserve(String prefix, {String ext = 'jpg'}) async {
+    final dir = await _ensure();
+    final name =
+        '${prefix}_${DateTime.now().millisecondsSinceEpoch}_${_seq++}.$ext';
+    return File('${dir.path}/$name');
+  }
+
   /// [sourcePath] 파일을 작업 폴더로 복사하고 새 File을 돌려준다.
   Future<File> copyInto(
     String sourcePath,
     String prefix, {
     String ext = 'jpg',
   }) async {
-    final dir = await _ensure();
-    final name = '${prefix}_${DateTime.now().millisecondsSinceEpoch}.$ext';
-    final dest = File('${dir.path}/$name');
+    final dest = await reserve(prefix, ext: ext);
     await File(sourcePath).copy(dest.path);
     return dest;
-  }
-
-  /// 작업 폴더 안에 아직 존재하지 않는 새 파일 경로를 예약한다.
-  /// (파일 복사가 아니라 직접 내용을 만들어 써야 하는 경우, 예: 이미지 가공 결과)
-  Future<File> reserve(String prefix, {String ext = 'jpg'}) async {
-    final dir = await _ensure();
-    final name = '${prefix}_${DateTime.now().millisecondsSinceEpoch}.$ext';
-    return File('${dir.path}/$name');
   }
 
   /// [file]이 이 작업 폴더가 소유한 파일이면 백그라운드로 삭제한다.

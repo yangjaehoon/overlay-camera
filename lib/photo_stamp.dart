@@ -14,18 +14,12 @@ extension StampCornerX on StampCorner {
       this == StampCorner.topLeft || this == StampCorner.bottomLeft;
   bool get isTop => this == StampCorner.topLeft || this == StampCorner.topRight;
 
-  Alignment get alignment {
-    switch (this) {
-      case StampCorner.topLeft:
-        return Alignment.topLeft;
-      case StampCorner.topRight:
-        return Alignment.topRight;
-      case StampCorner.bottomLeft:
-        return Alignment.bottomLeft;
-      case StampCorner.bottomRight:
-        return Alignment.bottomRight;
-    }
-  }
+  Alignment get alignment => switch (this) {
+    StampCorner.topLeft => Alignment.topLeft,
+    StampCorner.topRight => Alignment.topRight,
+    StampCorner.bottomLeft => Alignment.bottomLeft,
+    StampCorner.bottomRight => Alignment.bottomRight,
+  };
 }
 
 String _two(int n) => n.toString().padLeft(2, '0');

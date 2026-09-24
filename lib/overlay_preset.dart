@@ -54,20 +54,21 @@ class OverlayPreset {
     final name = json['name'];
     final imagePath = json['imagePath'];
     if (id is! String || name is! String || imagePath is! String) return null;
-    double num_(Object? v, double fallback) =>
+    // 숫자·불리언은 손상돼도 프리셋 전체를 버리지 않고 기본값으로 떨어뜨린다.
+    double asDouble(Object? v, double fallback) =>
         v is num ? v.toDouble() : fallback;
-    bool bool_(Object? v) => v is bool && v;
+    bool asBool(Object? v) => v is bool && v;
     return OverlayPreset(
       id: id,
       name: name,
       imagePath: imagePath,
-      opacity: num_(json['opacity'], 0.45).clamp(0.0, 1.0).toDouble(),
-      dx: num_(json['dx'], 0),
-      dy: num_(json['dy'], 0),
-      scale: num_(json['scale'], 1.0),
-      rotation: num_(json['rotation'], 0),
-      mirrored: bool_(json['mirrored']),
-      inverted: bool_(json['inverted']),
+      opacity: asDouble(json['opacity'], 0.45).clamp(0.0, 1.0).toDouble(),
+      dx: asDouble(json['dx'], 0),
+      dy: asDouble(json['dy'], 0),
+      scale: asDouble(json['scale'], 1.0),
+      rotation: asDouble(json['rotation'], 0),
+      mirrored: asBool(json['mirrored']),
+      inverted: asBool(json['inverted']),
     );
   }
 }

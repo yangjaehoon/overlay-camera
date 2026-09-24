@@ -1,5 +1,4 @@
-import 'dart:collection';
-
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart' show Offset, Size;
 
 import 'controller_base.dart';

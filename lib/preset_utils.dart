@@ -61,13 +61,3 @@ List<T> writePreset<T>(List<T> presets, PresetSlot<T> slot, T entry) =>
       PresetAppend() => [...presets, entry],
       PresetFull() => throw StateError('자리가 없는 프리셋 슬롯에 저장을 시도했습니다.'),
     };
-
-extension FirstWhereOrNullExtension<E> on Iterable<E> {
-  /// [test]를 만족하는 첫 항목, 없으면 null.
-  E? firstWhereOrNull(bool Function(E) test) {
-    for (final e in this) {
-      if (test(e)) return e;
-    }
-    return null;
-  }
-}
